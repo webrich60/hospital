@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>病院・お薬 記録帳</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+  <div class="min-h-screen pb-20">
+    <!-- ヘッダー -->
+    <header class="bg-teal-600 text-white p-4 shadow-md sticky top-0 z-10 border-b border-teal-500">
+      <div class="max-w-3xl mx-auto flex justify-between items-center">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+          <div class="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
+            <i data-lucide="hospital" class="w-6 h-6" stroke-width="2.5"></i>
+          </div>
+          病院・お薬 記録帳
+        </h1>
+      </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="max-w-3xl mx-auto p-4">
+      
+      <!-- 記録するタブ -->
+      <div id="tab-record" class="space-y-6">
+        <div class="bg-white rounded-xl shadow-sm p-6 space-y-6">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h2 id="formTitle" class="text-lg font-bold text-teal-700">新しい受診記録</h2>
+            <button id="formCancelEditBtn" onclick="app.cancelEdit()" class="hidden text-sm text-gray-500 hover:text-gray-700 underline">
+              編集をキャンセル
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                <i data-lucide="hospital" class="w-4 h-4"></i> 病院の選択 *
+              </label>
+              <select id="formHospitalSelect" onchange="app.handleHospitalSelectChange(this.value)" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none bg-white" required>
+                <!-- JSで動的に生成 -->
+              </select>
+
+              <!-- 新規病院追加時の入力欄 -->
+              <div id="formNewHospitalContainer" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">追加する病院名 *</label>
+                  <input type="text" id="formNewHospitalName" class="w-full p-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 outline-none" placeholder="例: ゆず内科クリニック">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">診療科・種類</label>
+                  <input type="text" id="formNewHospitalType" class="w-full p-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 outline-none" placeholder="例: 内科、眼科、皮膚科など">
+                </div>
+              </div>
+            </div>
+            
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                <i data-lucide="calendar" class="w-4 h-4"></i> 受診日
+              </label>
+              <input type="date" id="formDate" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+              <i data-lucide="user" class="w-4 h-4"></i> 自分が伝えたこと（症状など）
+            </label>
+            <textarea id="formToldDoctor" rows="3" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" placeholder="例: 昨日から38度の熱があり、喉が痛いです。"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+              <i data-lucide="stethoscope" class="w-4 h-4"></i> 先生が話したこと（診断結果・注意点）
+            </label>
+            <textarea id="formDoctorSaid" rows="3" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" placeholder="例: 夏風邪ですね。水分をよく取って休んでください。"></textarea>
+          </div>
+
+          <div class="bg-teal-50 p-4 rounded-lg border border-teal-100">
+            <label class="block text-sm font-bold text-teal-800 mb-2 flex items-center gap-1">
+              <i data-lucide="pill" class="w-4.5 h-4.5"></i> 処方された薬の記録
+            </label>
+            
+            <div class="mb-4">
+              <p class="text-xs text-gray-600 mb-2">薬や処方箋の写真を撮るか、アップロードしてAIに読み取らせることができます。</p>
+              <div class="flex items-center gap-2">
+                <label class="flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-gray-50 transition">
+                  <i data-lucide="camera" class="w-4 h-4"></i>
+                  写真を選ぶ
+                  <input type="file" id="formImageInput" accept="image/*" onchange="app.handleImageChange(event)" class="hidden" />
+                </label>
+                
+                <div id="formAnalyzeBtnContainer" class="hidden">
+                  <button id="formAnalyzeBtn" onclick="app.analyzeMedicineImage()" class="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition disabled:opacity-50">
+                    <span id="formAnalyzeIcon"><i data-lucide="upload" class="w-4 h-4"></i></span>
+                    <span id="formAnalyzeText">AIで読み取る</span>
+                  </button>
+                </div>
+              </div>
+              <div id="formImagePreviewContainer" class="mt-2 hidden">
+                <img id="formImagePreview" src="" alt="Preview" class="max-h-32 rounded-lg border shadow-sm" />
+              </div>
+            </div>
+
+            <textarea id="formMedicines" rows="4" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" placeholder="AIの読み取り結果がここに入ります。手動で書き込むこともできます。"></textarea>
+          </div>
+
+          <button onclick="app.handleSave()" class="w-full flex items-center justify-center gap-2 bg-teal-600 text-white font-bold py-3 rounded-lg hover:bg-teal-700 transition shadow-md">
+            <i data-lucide="save" class="w-5 h-5"></i>
+            <span id="formSaveBtnText">記録を保存する</span>
+          </button>
+          <div id="formSaveMessageContainer" class="hidden">
+            <p id="formSaveMessage" class="text-center text-sm font-bold text-teal-600 bg-teal-50 p-2 rounded"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 履歴を見るタブ -->
+      <div id="tab-history" class="hidden space-y-6">
+        <div id="historyContainer" class="space-y-6">
+          <!-- JSで動的に生成 -->
+        </div>
+      </div>
+
+      <!-- 設定タブ -->
+      <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-4">
+        <h2 class="text-lg font-bold border-b pb-2 flex items-center gap-2">
+          <i data-lucide="settings" class="w-5 h-5"></i> 設定
+        </h2>
+        
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-gray-700">
+            Google Apps Script (GAS) Webhook URL
+          </label>
+          <p class="text-xs text-gray-500 mb-2">
+            スプレッドシートにデータを自動転記するために、デプロイしたGASのウェブアプリURLを入力してください。
+          </p>
+          <input type="url" id="settingGasUrl" onchange="app.saveGasUrl()" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" placeholder="https://script.google.com/macros/s/...">
+          <p id="settingGasUrlMsg" class="hidden text-xs text-teal-600 font-bold mt-1">✓ URLが保存されました。</p>
+        </div>
+        
+        <div class="mt-6 bg-gray-50 p-4 rounded-lg border text-sm text-gray-600">
+          <p class="font-bold mb-2">💡 GASの設定方法</p>
+          <ol class="list-decimal list-inside space-y-1">
+            <li>Googleスプレッドシートを新規作成します。</li>
+            <li>「拡張機能」＞「Apps Script」を開きます。</li>
+            <li>GAS設定手順のコードを貼り付けます。</li>
+            <li>「デプロイ」＞「新しいデプロイ」を作成し、アクセスできるユーザーを「全員」に設定します。</li>
+            <li>発行されたウェブアプリのURLを上に貼り付けてください。</li>
+          </ol>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ボトムナビゲーション -->
+    <nav class="fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+      <button id="nav-record" onclick="app.switchTab('record')" class="flex-1 py-3 flex flex-col items-center gap-1 text-teal-600">
+        <i data-lucide="camera" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">記録する</span>
+      </button>
+      <button id="nav-history" onclick="app.switchTab('history')" class="flex-1 py-3 flex flex-col items-center gap-1 text-gray-400">
+        <i data-lucide="list" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">履歴を見る</span>
+      </button>
+      <button id="nav-settings" onclick="app.switchTab('settings')" class="flex-1 py-3 flex flex-col items-center gap-1 text-gray-400">
+        <i data-lucide="settings" class="w-5 h-5"></i>
+        <span class="text-[10px] font-bold">設定</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    // Canvas環境ではAPIキーが自動注入されます
+    const apiKey = ""; 
+
+    const defaultHospitals = [
+      { name: 'ふくい南アイクリニック', type: '眼科' },
+      { name: 'バプテスト眼科クリニック', type: '眼科' },
+      { name: '松本耳鼻咽喉科クリニック', type: '耳鼻咽喉科' },
+      { name: '向坂医院', type: '内科' },
+      { name: '富山高岡整志会病院', type: '整形外科' }
+    ];
+
+    const app = {
+      records: [],
+      hospitals: [],
+      gasUrl: '',
+      editingId: null,
+      imageFile: null,
+      imagePreview: '',
+      isAnalyzing: false,
+
+      init() {
+        // ローカルストレージからデータをロード
+        const savedRecords = localStorage.getItem('hospital_records');
+        if (savedRecords) this.records = JSON.parse(savedRecords);
+        
+        const savedGasUrl = localStorage.getItem('hospital_gas_url');
+        if (savedGasUrl) {
+          this.gasUrl = savedGasUrl;
+          document.getElementById('settingGasUrl').value = this.gasUrl;
+        }
+        
+        const savedHospitals = localStorage.getItem('hospital_list');
+        if (savedHospitals) {
+          this.hospitals = JSON.parse(savedHospitals);
+        } else {
+          this.hospitals = defaultHospitals;
+          localStorage.setItem('hospital_list', JSON.stringify(defaultHospitals));
+        }
+
+        // 初期日付のセット
+        document.getElementById('formDate').value = new Date().toISOString().split('T')[0];
+
+        // 病院リストの描画
+        this.renderHospitalOptions();
+
+        // アイコンの初期化
+        lucide.createIcons();
+      },
+
+      switchTab(tabId) {
+        // すべてのタブとナビをリセット
+        ['record', 'history', 'settings'].forEach(id => {
+          document.getElementById('tab-' + id).classList.add('hidden');
+          const nav = document.getElementById('nav-' + id);
+          nav.classList.remove('text-teal-600');
+          nav.classList.add('text-gray-400');
+        });
+        
+        // 選択されたタブを表示
+        document.getElementById('tab-' + tabId).classList.remove('hidden');
+        const activeNav = document.getElementById('nav-' + tabId);
+        activeNav.classList.remove('text-gray-400');
+        activeNav.classList.add('text-teal-600');
+        
+        if (tabId === 'history') {
+          this.renderHistory();
+        } else if (tabId === 'record' && !this.editingId) {
+          window.scrollTo(0, 0);
+        }
+      },
+
+      renderHospitalOptions() {
+        const select = document.getElementById('formHospitalSelect');
+        select.innerHTML = '<option value="" disabled selected>選択してください</option>';
+        this.hospitals.forEach(h => {
+          const opt = document.createElement('option');
+          opt.value = h.name;
+          opt.innerText = `${h.name} ${h.type ? `(${h.type})` : ''}`;
+          select.appendChild(opt);
+        });
+        const newOpt = document.createElement('option');
+        newOpt.value = 'new';
+        newOpt.innerText = '+ 新しく病院を追加する';
+        select.appendChild(newOpt);
+      },
+
+      handleHospitalSelectChange(value) {
+        const container = document.getElementById('formNewHospitalContainer');
+        const inputName = document.getElementById('formNewHospitalName');
+        
+        if (value === 'new') {
+          container.classList.remove('hidden');
+          inputName.required = true;
+        } else {
+          container.classList.add('hidden');
+          inputName.required = false;
+        }
+      },
+
+      handleImageChange(e) {
+        const file = e.target.files[0];
+        if (file) {
+          this.imageFile = file;
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            this.imagePreview = reader.result;
+            document.getElementById('formImagePreview').src = this.imagePreview;
+            document.getElementById('formImagePreviewContainer').classList.remove('hidden');
+            document.getElementById('formAnalyzeBtnContainer').classList.remove('hidden');
+          };
+          reader.readAsDataURL(file);
+        }
+      },
+
+      // 指数バックオフ付きのフェッチ関数
+      async fetchWithRetry(url, options, retries = 5) {
+        const delays = [1000, 2000, 4000, 8000, 16000];
+        for (let i = 0; i < retries; i++) {
+          try {
+            const response = await fetch(url, options);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+          } catch (error) {
+            if (i === retries - 1) throw error;
+            await new Promise(res => setTimeout(res, delays[i]));
+          }
+        }
+      },
+
+      async analyzeMedicineImage() {
+        if (!this.imagePreview || this.isAnalyzing) return;
+        
+        this.isAnalyzing = true;
+        const btn = document.getElementById('formAnalyzeBtn');
+        const iconContainer = document.getElementById('formAnalyzeIcon');
+        const textContainer = document.getElementById('formAnalyzeText');
+        
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        iconContainer.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>';
+        textContainer.innerText = 'AI解析中...';
+        lucide.createIcons();
+
+        try {
+          const base64Data = this.imagePreview.split(',')[1];
+          const mimeType = this.imageFile.type;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+          
+          const payload = {
+            contents: [{
+              role: "user",
+              parts: [
+                { text: "この画像に写っている薬の名前、用法、効能を読み取り、テキストとして分かりやすく箇条書きで出力してください。薬が複数ある場合はそれぞれ記載してください。不要な挨拶などは省いてください。" },
+                { inlineData: { mimeType: mimeType, data: base64Data } }
+              ]
+            }]
+          };
+
+          const result = await this.fetchWithRetry(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+          
+          if (extractedText) {
+            const medsArea = document.getElementById('formMedicines');
+            medsArea.value = medsArea.value ? medsArea.value + '\n\n【AI追記】\n' + extractedText : extractedText;
+          } else {
+            alert("テキストを抽出できませんでした。手動で入力してください。");
+          }
+        } catch (error) {
+          console.error("AI解析エラー:", error);
+          alert("AI解析中にエラーが発生しました。");
+        } finally {
+          this.isAnalyzing = false;
+          btn.disabled = false;
+          btn.classList.remove('opacity-50');
+          iconContainer.innerHTML = '<i data-lucide="upload" class="w-4 h-4"></i>';
+          textContainer.innerText = 'AIで読み取る';
+          lucide.createIcons();
+        }
+      },
+
+      async sendToGas(record) {
+        if (!this.gasUrl) return false;
+        try {
+          await fetch(this.gasUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+          });
+          return true;
+        } catch (error) {
+          console.error("GAS送信エラー:", error);
+          return false;
+        }
+      },
+
+      async handleSave() {
+        const selectValue = document.getElementById('formHospitalSelect').value;
+        let hospitalName = '';
+        let hospitalType = '';
+        let isNew = false;
+        
+        if (!selectValue) {
+          alert("病院名を選択または入力してください。");
+          return;
+        }
+        
+        if (selectValue === 'new') {
+          hospitalName = document.getElementById('formNewHospitalName').value.trim();
+          hospitalType = document.getElementById('formNewHospitalType').value.trim();
+          if (!hospitalName) {
+            alert("追加する病院名を入力してください。");
+            return;
+          }
+          isNew = true;
+        } else {
+          hospitalName = selectValue;
+          const selectedHospital = this.hospitals.find(h => h.name === hospitalName);
+          if (selectedHospital) {
+            hospitalType = selectedHospital.type || '';
+          }
+        }
+        
+        const date = document.getElementById('formDate').value;
+        const toldDoctor = document.getElementById('formToldDoctor').value;
+        const doctorSaid = document.getElementById('formDoctorSaid').value;
+        const medicines = document.getElementById('formMedicines').value;
+        
+        // 新規追加ならリストを更新
+        if (isNew) {
+          this.hospitals.push({ name: hospitalName, type: hospitalType });
+          localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
+          this.renderHospitalOptions();
+        }
+        
+        const timestamp = new Date().toISOString();
+        let newRecord;
+        
+        if (this.editingId) {
+          newRecord = { id: this.editingId, hospitalName, hospitalType, date, toldDoctor, doctorSaid, medicines, timestamp };
+          this.records = this.records.map(r => r.id === this.editingId ? newRecord : r);
+        } else {
+          newRecord = { id: Date.now().toString(), hospitalName, hospitalType, date, toldDoctor, doctorSaid, medicines, timestamp };
+          this.records.unshift(newRecord); // 一番上に追加
+        }
+        
+        localStorage.setItem('hospital_records', JSON.stringify(this.records));
+        
+        let gasSuccess = false;
+        if (this.gasUrl) {
+          gasSuccess = await this.sendToGas(newRecord);
+        }
+        
+        const msg = this.gasUrl 
+           ? (gasSuccess ? (this.editingId ? '編集内容を保存し、スプレッドシートに送信しました。' : '保存し、スプレッドシートに送信しました！') : 'ローカルに保存しましたが、GAS送信に失敗しました。') 
+           : 'ローカルに保存しました！';
+           
+        this.showSaveMessage(msg);
+        this.cancelEdit();
+      },
+
+      editRecord(id) {
+        const record = this.records.find(r => r.id === id);
+        if (!record) return;
+        
+        this.editingId = id;
+        
+        const select = document.getElementById('formHospitalSelect');
+        const hospitalExists = this.hospitals.some(h => h.name === record.hospitalName);
+        
+        if (hospitalExists) {
+           select.value = record.hospitalName;
+           this.handleHospitalSelectChange(record.hospitalName);
+        } else {
+           select.value = 'new';
+           this.handleHospitalSelectChange('new');
+           document.getElementById('formNewHospitalName').value = record.hospitalName;
+           document.getElementById('formNewHospitalType').value = record.hospitalType || '';
+        }
+        
+        document.getElementById('formDate').value = record.date;
+        document.getElementById('formToldDoctor').value = record.toldDoctor || '';
+        document.getElementById('formDoctorSaid').value = record.doctorSaid || '';
+        document.getElementById('formMedicines').value = record.medicines || '';
+        
+        document.getElementById('formTitle').innerText = "受診記録の編集";
+        document.getElementById('formSaveBtnText').innerText = "編集内容を保存する";
+        document.getElementById('formCancelEditBtn').classList.remove('hidden');
+        
+        this.switchTab('record');
+        window.scrollTo(0, 0);
+      },
+
+      cancelEdit() {
+        this.editingId = null;
+        
+        document.getElementById('formHospitalSelect').value = '';
+        this.handleHospitalSelectChange('');
+        
+        document.getElementById('formNewHospitalName').value = '';
+        document.getElementById('formNewHospitalType').value = '';
+        document.getElementById('formDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('formToldDoctor').value = '';
+        document.getElementById('formDoctorSaid').value = '';
+        document.getElementById('formMedicines').value = '';
+        
+        this.imageFile = null;
+        this.imagePreview = '';
+        document.getElementById('formImagePreviewContainer').classList.add('hidden');
+        document.getElementById('formAnalyzeBtnContainer').classList.add('hidden');
+        document.getElementById('formImageInput').value = '';
+        
+        document.getElementById('formTitle').innerText = "新しい受診記録";
+        document.getElementById('formSaveBtnText').innerText = "記録を保存する";
+        document.getElementById('formCancelEditBtn').classList.add('hidden');
+      },
+
+      deleteRecord(id) {
+        this.records = this.records.filter(r => r.id !== id);
+        localStorage.setItem('hospital_records', JSON.stringify(this.records));
+        this.renderHistory();
+      },
+
+      showSaveMessage(msg) {
+        const container = document.getElementById('formSaveMessageContainer');
+        const el = document.getElementById('formSaveMessage');
+        el.innerText = msg;
+        container.classList.remove('hidden');
+        setTimeout(() => { container.classList.add('hidden'); }, 3000);
+      },
+
+      saveGasUrl() {
+        const url = document.getElementById('settingGasUrl').value;
+        this.gasUrl = url;
+        localStorage.setItem('hospital_gas_url', url);
+        const msg = document.getElementById('settingGasUrlMsg');
+        msg.classList.remove('hidden');
+        setTimeout(() => { msg.classList.add('hidden'); }, 3000);
+      },
+
+      escapeHTML(str) {
+        if (!str) return '';
+        return str.replace(/[&<>'"]/g, 
+          tag => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;'
+          }[tag])
+        );
+      },
+
+      getGroupedRecords() {
+        return this.records.reduce((acc, record) => {
+          if (!acc[record.hospitalName]) {
+            acc[record.hospitalName] = {
+              name: record.hospitalName,
+              type: record.hospitalType || '',
+              records: []
+            };
+          }
+          if (record.hospitalType && !acc[record.hospitalName].type) {
+            acc[record.hospitalName].type = record.hospitalType;
+          }
+          acc[record.hospitalName].records.push(record);
+          return acc;
+        }, {});
+      },
+
+      renderHistory() {
+        const container = document.getElementById('historyContainer');
+        const grouped = this.getGroupedRecords();
+        const groupValues = Object.values(grouped);
+        
+        if (groupValues.length === 0) {
+          container.innerHTML = `<div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500">記録がありません。</div>`;
+          return;
+        }
+        
+        let html = '';
+        groupValues.forEach(group => {
+          let typeHtml = group.type ? `<span class="text-xs text-gray-500 font-normal ml-1">(${this.escapeHTML(group.type)})</span>` : '';
+          
+          let recordsHtml = group.records.map(record => {
+             const toldDoctor = record.toldDoctor ? `
+                <div>
+                  <p class="text-xs font-bold text-gray-500 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 伝えたこと</p>
+                  <p class="text-sm text-gray-800 bg-gray-50 p-2 rounded">${this.escapeHTML(record.toldDoctor).replace(/\n/g, '<br>')}</p>
+                </div>
+             ` : '';
+             const doctorSaid = record.doctorSaid ? `
+                <div>
+                  <p class="text-xs font-bold text-gray-500 flex items-center gap-1"><i data-lucide="stethoscope" class="w-3 h-3"></i> 先生の話</p>
+                  <p class="text-sm text-gray-800 bg-teal-50 p-2 rounded">${this.escapeHTML(record.doctorSaid).replace(/\n/g, '<br>')}</p>
+                </div>
+             ` : '';
+             const medicines = record.medicines ? `
+                <div>
+                  <p class="text-xs font-bold text-gray-500 flex items-center gap-1"><i data-lucide="pill" class="w-3 h-3"></i> 処方薬</p>
+                  <p class="text-sm text-gray-800 whitespace-pre-wrap border p-2 rounded bg-white">${this.escapeHTML(record.medicines)}</p>
+                </div>
+             ` : '';
+             
+             return `
+              <div class="p-4 hover:bg-gray-50 transition">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-sm font-bold text-gray-500 flex items-center gap-1">
+                    <i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${record.date}
+                  </span>
+                  <div class="flex gap-3">
+                    <button onclick="app.editRecord('${record.id}')" class="text-blue-400 hover:text-blue-600 transition" title="編集する">
+                      <i data-lucide="edit" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="if(confirm('この記録を削除しますか？')) app.deleteRecord('${record.id}')" class="text-red-400 hover:text-red-600 transition" title="削除する">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="space-y-3 mt-3">
+                  ${toldDoctor}
+                  ${doctorSaid}
+                  ${medicines}
+                </div>
+              </div>
+             `;
+          }).join('');
+
+          html += `
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div class="bg-gray-100 p-3 px-4 border-b flex items-center gap-2">
+                <i data-lucide="hospital" class="w-4.5 h-4.5 text-teal-600"></i>
+                <h3 class="font-bold text-gray-800">${this.escapeHTML(group.name)} ${typeHtml}</h3>
+                <span class="ml-auto bg-teal-100 text-teal-800 text-xs px-2 py-1 rounded-full">${group.records.length}件</span>
+              </div>
+              <div class="divide-y">
+                ${recordsHtml}
+              </div>
+            </div>
+          `;
+        });
+        
+        container.innerHTML = html;
+        // 動的生成された要素のアイコンをSVGに置換
+        lucide.createIcons();
+      }
+    };
+
+    // アプリ初期化
+    document.addEventListener('DOMContentLoaded', () => {
+      app.init();
+    });
+  </script>
+</body>
+</html>
