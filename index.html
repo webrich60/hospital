@@ -213,7 +213,24 @@
         
         const savedHospitals = localStorage.getItem('hospital_list');
         if (savedHospitals) {
-          this.hospitals = JSON.parse(savedHospitals);
+          let parsedHospitals = JSON.parse(savedHospitals);
+          
+          // 古い「松本」の記憶が残っていたら「まつもと」に修正する処理
+          let isUpdated = false;
+          parsedHospitals = parsedHospitals.map(h => {
+            if (h.name === '松本耳鼻咽喉科クリニック') {
+              isUpdated = true;
+              return { ...h, name: 'まつもと耳鼻咽喉科クリニック' };
+            }
+            return h;
+          });
+          
+          this.hospitals = parsedHospitals;
+          
+          // 修正があった場合は記憶を上書き保存
+          if (isUpdated) {
+            localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
+          }
         } else {
           this.hospitals = defaultHospitals;
           localStorage.setItem('hospital_list', JSON.stringify(defaultHospitals));
