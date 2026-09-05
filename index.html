@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>病院・お薬 記録帳 v2.0</title>
+  <title>病院・お薬 記録帳 v2.1</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -18,7 +18,7 @@
           <div class="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
             <i data-lucide="hospital" class="w-6 h-6" stroke-width="2.5"></i>
           </div>
-          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.0</span>
+          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.1</span> <span id="jsStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">JS確認中</span>
         </h1>
         <button type="button" onclick="app.syncNow(true)" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/40 px-2.5 py-1.5 rounded-lg text-xs font-bold">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i><span id="headerSyncText">同期</span>
@@ -126,7 +126,7 @@
       <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-5 border border-gray-300">
         <div class="flex items-center justify-between border-b border-gray-300 pb-2">
           <h2 class="text-lg font-bold flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2>
-          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.0</span>
+          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.1</span>
         </div>
 
         <div class="space-y-3">
@@ -215,7 +215,7 @@
   </div>
 
   <script>
-    const APP_VERSION = '2.0';
+    const APP_VERSION = '2.1';
     const defaultHospitals = [
       { name: 'ふくい南アイクリニック', type: '眼科' },
       { name: 'バプテスト眼科クリニック', type: '眼科' },
@@ -223,6 +223,144 @@
       { name: '向坂医院', type: '内科' },
       { name: '富山高岡整志会病院', type: '整形外科' }
     ];
+
+    const safeStore = {
+      cache: new Map(),
+      db: null,
+      mode: 'memory',
+      writableLocalStorage: false,
+      knownKeys: [
+        'hospital_records','hospital_gas_url','hospital_sync_token','hospital_list',
+        'hospital_pending_ops_v2','hospital_connection_checked_v2','hospital_last_diag',
+        'hospital_last_sync','hospital_last_sync_error'
+      ],
+
+      async init() {
+        // localStorage は同一ドメイン全体で容量を共有します。
+        // 容量超過・ブラウザ制限があってもアプリを止めず、IndexedDBへ退避します。
+        try {
+          const testKey = '__yuzu_storage_test__';
+          window.localStorage.setItem(testKey, '1');
+          window.localStorage.removeItem(testKey);
+          this.writableLocalStorage = true;
+          this.mode = 'localStorage';
+        } catch (e) {
+          this.writableLocalStorage = false;
+          console.warn('localStorage is not writable; using fallback storage', e);
+        }
+
+        try {
+          this.db = await new Promise(resolve => {
+            if (!window.indexedDB) return resolve(null);
+            let settled = false;
+            const done = v => { if (!settled) { settled = true; resolve(v); } };
+            try {
+              const req = window.indexedDB.open('YUZU_Hospital_Record_DB', 1);
+              req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+              };
+              req.onsuccess = () => done(req.result);
+              req.onerror = () => done(null);
+              req.onblocked = () => done(null);
+              setTimeout(() => done(null), 2500);
+            } catch (_) { done(null); }
+          });
+          if (this.db && !this.writableLocalStorage) this.mode = 'IndexedDB';
+        } catch (_) { this.db = null; }
+
+        for (const key of this.knownKeys) {
+          let value = null;
+          // 書き込み不可でも「読み込み」はできる場合があるので、旧データ救出のため試します。
+          try { value = window.localStorage.getItem(key); } catch (_) {}
+          if (value == null && this.db) {
+            try { value = await this.idbGet(key); } catch (_) {}
+          }
+          if (value != null) this.cache.set(key, String(value));
+        }
+
+        // 読めた旧localStorageデータをIndexedDBへバックアップ。
+        if (this.db) {
+          for (const [key, value] of this.cache.entries()) {
+            try { await this.idbSet(key, value); } catch (_) {}
+          }
+        }
+        return this.mode;
+      },
+
+      get(key) {
+        if (this.cache.has(key)) return this.cache.get(key);
+        try {
+          const v = window.localStorage.getItem(key);
+          if (v != null) { this.cache.set(key, String(v)); return String(v); }
+        } catch (_) {}
+        return null;
+      },
+
+      set(key, value) {
+        const text = String(value == null ? '' : value);
+        this.cache.set(key, text);
+        let localOk = false;
+        try {
+          window.localStorage.setItem(key, text);
+          localOk = true;
+          this.writableLocalStorage = true;
+          this.mode = 'localStorage';
+        } catch (e) {
+          this.writableLocalStorage = false;
+          console.warn('localStorage write failed; fallback storage used', e);
+        }
+        if (this.db) {
+          this.idbSet(key, text).catch(() => {});
+          if (!localOk) this.mode = 'IndexedDB';
+        }
+        return localOk || !!this.db || this.cache.has(key);
+      },
+
+      remove(key) {
+        this.cache.delete(key);
+        try { window.localStorage.removeItem(key); } catch (_) {}
+        if (this.db) this.idbDelete(key).catch(() => {});
+      },
+
+      idbGet(key) {
+        return new Promise(resolve => {
+          if (!this.db) return resolve(null);
+          try {
+            const tx = this.db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(key);
+            req.onsuccess = () => resolve(req.result == null ? null : String(req.result));
+            req.onerror = () => resolve(null);
+          } catch (_) { resolve(null); }
+        });
+      },
+
+      idbSet(key, value) {
+        return new Promise(resolve => {
+          if (!this.db) return resolve(false);
+          try {
+            const tx = this.db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').put(String(value), key);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+            tx.onabort = () => resolve(false);
+          } catch (_) { resolve(false); }
+        });
+      },
+
+      idbDelete(key) {
+        return new Promise(resolve => {
+          if (!this.db) return resolve(false);
+          try {
+            const tx = this.db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').delete(key);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+            tx.onabort = () => resolve(false);
+          } catch (_) { resolve(false); }
+        });
+      }
+    };
 
     const app = {
       records: [],
@@ -237,6 +375,9 @@
       connection: { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '' },
 
       async init() {
+        try { await safeStore.init(); } catch (e) { console.warn('safeStore init failed', e); }
+        const jsBadge = document.getElementById('jsStatusBadge');
+        if (jsBadge) { jsBadge.textContent = 'JS OK'; jsBadge.className = 'text-[10px] font-bold bg-green-100 text-green-900 border border-green-300 px-2 py-0.5 rounded-full'; }
         this.loadLocalCache();
         this.importSetupFromHash();
         this.bindSettingsAutosave();
@@ -262,11 +403,11 @@
       },
 
       loadLocalCache() {
-        try { this.records = JSON.parse(localStorage.getItem('hospital_records') || '[]'); }
+        try { this.records = JSON.parse(safeStore.get('hospital_records') || '[]'); }
         catch (_) { this.records = []; }
 
-        this.gasUrl = String(localStorage.getItem('hospital_gas_url') || '').trim();
-        this.syncToken = String(localStorage.getItem('hospital_sync_token') || '').trim();
+        this.gasUrl = String(safeStore.get('hospital_gas_url') || '').trim();
+        this.syncToken = String(safeStore.get('hospital_sync_token') || '').trim();
 
         const gasInput = document.getElementById('settingGasUrl');
         const tokenInput = document.getElementById('settingSyncToken');
@@ -274,7 +415,7 @@
         if (tokenInput) tokenInput.value = this.syncToken;
 
         let savedHospitals = [];
-        try { savedHospitals = JSON.parse(localStorage.getItem('hospital_list') || '[]'); } catch (_) {}
+        try { savedHospitals = JSON.parse(safeStore.get('hospital_list') || '[]'); } catch (_) {}
         this.hospitals = this.mergeHospitals(defaultHospitals, savedHospitals, this.records.map(r => ({ name: r.hospitalName, type: r.hospitalType })));
       },
 
@@ -310,13 +451,13 @@
         if (gasInput && gasInput.value !== nextGas) gasInput.value = nextGas;
 
         if (persist) {
-          localStorage.setItem('hospital_gas_url', this.gasUrl);
-          localStorage.setItem('hospital_sync_token', this.syncToken);
+          safeStore.set('hospital_gas_url', this.gasUrl);
+          safeStore.set('hospital_sync_token', this.syncToken);
         }
 
         if (changed) {
           this.connection = { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '' };
-          localStorage.removeItem('hospital_connection_checked_v2');
+          safeStore.remove('hospital_connection_checked_v2');
         }
         this.updateSyncStatus();
         return { gasUrl: this.gasUrl, syncToken: this.syncToken };
@@ -333,8 +474,8 @@
           const cfg = JSON.parse(json);
           const gas = this.normalizeGasUrl(cfg.gas || '');
           const token = String(cfg.token || '').trim();
-          if (gas) localStorage.setItem('hospital_gas_url', gas);
-          if (token) localStorage.setItem('hospital_sync_token', token);
+          if (gas) safeStore.set('hospital_gas_url', gas);
+          if (token) safeStore.set('hospital_sync_token', token);
           this.gasUrl = gas || this.gasUrl;
           this.syncToken = token || this.syncToken;
           const gasInput = document.getElementById('settingGasUrl');
@@ -361,12 +502,12 @@
       },
 
       getPendingOps() {
-        try { return JSON.parse(localStorage.getItem('hospital_pending_ops_v2') || '[]'); }
+        try { return JSON.parse(safeStore.get('hospital_pending_ops_v2') || '[]'); }
         catch (_) { return []; }
       },
 
       setPendingOps(ops) {
-        localStorage.setItem('hospital_pending_ops_v2', JSON.stringify(Array.isArray(ops) ? ops : []));
+        safeStore.set('hospital_pending_ops_v2', JSON.stringify(Array.isArray(ops) ? ops : []));
         this.updateSyncStatus();
       },
 
@@ -383,8 +524,8 @@
       },
 
       saveLocalCache() {
-        localStorage.setItem('hospital_records', JSON.stringify(this.records));
-        localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
+        safeStore.set('hospital_records', JSON.stringify(this.records));
+        safeStore.set('hospital_list', JSON.stringify(this.hospitals));
       },
 
       createRecordId() {
@@ -487,8 +628,8 @@
         if (/SYNC_TOKENが設定されていません/.test(raw)) return 'GAS側にSYNC_TOKENが設定されていません。\nApps Scriptで setupYuzu を1回実行するか、スクリプトプロパティにSYNC_TOKENを設定してください。';
         if (/SPREADSHEET_ID/.test(raw)) return raw + '\nGASのスクリプトプロパティ「SPREADSHEET_ID」を確認してください。';
         if (/保存先スプレッドシートを取得できません/.test(raw)) return raw + '\nApps Scriptで setupYuzu を1回実行すると設定できます。';
-        if (/応答がありません|タイムアウト/.test(raw)) return 'GASから応答がありません。\n① Code.gs v2.0を保存\n② Webアプリを新しいバージョンで再デプロイ\n③ アクセスできるユーザーを「全員」に設定\n④ /exec URLを使用\nを確認してください。';
-        if (/無効なアクション/.test(raw)) return 'GASが旧版です。Code.gs v2.0を上書きして、新しいバージョンとして再デプロイしてください。';
+        if (/応答がありません|タイムアウト/.test(raw)) return 'GASから応答がありません。\n① Code.gs v2.1を保存\n② Webアプリを新しいバージョンで再デプロイ\n③ アクセスできるユーザーを「全員」に設定\n④ /exec URLを使用\nを確認してください。';
+        if (/無効なアクション/.test(raw)) return 'GASが旧版です。Code.gs v2.1を上書きして、新しいバージョンとして再デプロイしてください。';
         return raw;
       },
 
@@ -509,10 +650,13 @@
         this.setConnectionBadge('statusGasConnection', this.connection.gas, this.connection.gas === 'ok' ? '接続OK' : this.connection.gas === 'ng' ? '接続NG' : '未確認');
         this.setConnectionBadge('statusSpreadsheet', this.connection.spreadsheet, this.connection.spreadsheet === 'ok' ? '接続OK' : this.connection.spreadsheet === 'ng' ? '接続NG' : '未確認');
         const lastEl = document.getElementById('statusLastSync');
-        const last = localStorage.getItem('hospital_last_sync');
+        const last = safeStore.get('hospital_last_sync');
         if (lastEl) lastEl.textContent = last ? new Date(last).toLocaleString('ja-JP') : 'まだありません';
         const msg = document.getElementById('connectionDetail');
-        if (msg) msg.textContent = this.connection.message || '';
+        if (msg) {
+          const storageText = safeStore.mode === 'localStorage' ? '端末保存: localStorage' : safeStore.mode === 'IndexedDB' ? '端末保存: IndexedDB（容量対策）' : '端末保存: 一時メモリ';
+          msg.textContent = [this.connection.message || '', storageText].filter(Boolean).join('\n');
+        }
       },
 
       async saveSettings() {
@@ -520,7 +664,7 @@
         const check = this.validateSettings();
         if (!check.ok) return this.showPopup('設定を保存できませんでした', check.message, true);
         this.connection = { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '設定を保存しました。接続診断はまだ行っていません。' };
-        localStorage.removeItem('hospital_connection_checked_v2');
+        safeStore.remove('hospital_connection_checked_v2');
         this.updateSyncStatus();
         this.showPopup('設定を保存しました', 'GAS URLと同期キーをこの端末に保存しました。\n続けて「同期接続を診断する」を押してください。');
       },
@@ -558,8 +702,8 @@
           this.connection.token = 'ok';
           this.connection.spreadsheet = 'ok';
           this.connection.message = `GAS v${diag.appVersion || APP_VERSION} / ${diag.spreadsheetName || 'スプレッドシート'} / ${diag.recordCount || 0}件`;
-          localStorage.setItem('hospital_connection_checked_v2', '1');
-          localStorage.setItem('hospital_last_diag', new Date().toISOString());
+          safeStore.set('hospital_connection_checked_v2', '1');
+          safeStore.set('hospital_last_diag', new Date().toISOString());
           this.updateSyncStatus();
           if (showPopup) this.showPopup('診断結果：接続OK', `GAS・同期キー・スプレッドシートは正常です。\n現在${diag.recordCount || 0}件の記録を確認できます。`);
           return { ok: true, count: diag.recordCount || 0 };
@@ -569,7 +713,7 @@
           if (/同期キー/.test(detail) || /SYNC_TOKEN/.test(detail)) this.connection.token = 'ng';
           if (/スプレッドシート|SPREADSHEET_ID/.test(detail)) this.connection.spreadsheet = 'ng';
           this.connection.message = detail;
-          localStorage.removeItem('hospital_connection_checked_v2');
+          safeStore.remove('hospital_connection_checked_v2');
           this.updateSyncStatus('接続エラー');
           if (showPopup) this.showPopup('診断結果：接続できません', detail, true);
           return { ok: false, message: detail };
@@ -621,7 +765,7 @@
           return { ok: false, message: check.message };
         }
 
-        if (!skipDiagnose && localStorage.getItem('hospital_connection_checked_v2') !== '1') {
+        if (!skipDiagnose && safeStore.get('hospital_connection_checked_v2') !== '1') {
           const diag = await this.diagnoseSync(false);
           if (!diag.ok) {
             if (showResult) this.showPopup('同期できませんでした', diag.message || '接続診断に失敗しました。', true);
@@ -641,13 +785,13 @@
           this.records = this.applyPendingOpsToRecords(result.records);
           this.hospitals = this.mergeHospitals(defaultHospitals, result.hospitals || [], this.records.map(r => ({ name: r.hospitalName, type: r.hospitalType })));
           this.saveLocalCache();
-          localStorage.setItem('hospital_last_sync', new Date().toISOString());
-          localStorage.setItem('hospital_last_sync_error', '');
+          safeStore.set('hospital_last_sync', new Date().toISOString());
+          safeStore.set('hospital_last_sync_error', '');
           this.connection.gas = 'ok';
           this.connection.token = 'ok';
           this.connection.spreadsheet = 'ok';
           this.connection.message = `同期済み：${this.records.length}件`;
-          localStorage.setItem('hospital_connection_checked_v2', '1');
+          safeStore.set('hospital_connection_checked_v2', '1');
           this.renderHospitalOptions();
           this.renderHistory();
           this.updateSyncStatus();
@@ -660,7 +804,7 @@
           return { ok: pending === 0, count: this.records.length, pending };
         } catch (e) {
           const detail = this.friendlySyncError(e);
-          localStorage.setItem('hospital_last_sync_error', detail);
+          safeStore.set('hospital_last_sync_error', detail);
           this.connection.message = detail;
           this.updateSyncStatus('同期エラー');
           if (showResult) this.showPopup('同期できませんでした', `${detail}\n\nこの端末内の履歴は消していません。`, true);
@@ -705,15 +849,15 @@
 
       updateSyncStatus(forcedText = '') {
         const pending = this.getPendingOps().length;
-        const last = localStorage.getItem('hospital_last_sync');
+        const last = safeStore.get('hospital_last_sync');
         let text = forcedText;
         if (!text) {
           if (this.syncing) text = '同期中…';
           else if (!this.gasUrl) text = '未接続（GAS URL未設定）';
           else if (!this.syncToken) text = '未接続（同期キー未設定）';
           else if (pending > 0) text = `未同期 ${pending}件`;
-          else if (last && localStorage.getItem('hospital_connection_checked_v2') === '1') text = `同期済み ${new Date(last).toLocaleString('ja-JP')}`;
-          else if (localStorage.getItem('hospital_connection_checked_v2') === '1') text = '接続OK（同期待ち）';
+          else if (last && safeStore.get('hospital_connection_checked_v2') === '1') text = `同期済み ${new Date(last).toLocaleString('ja-JP')}`;
+          else if (safeStore.get('hospital_connection_checked_v2') === '1') text = '接続OK（同期待ち）';
           else text = '設定済み（接続未確認）';
         }
         ['syncStatusText', 'settingsSyncStatus'].forEach(id => {
@@ -915,9 +1059,9 @@
             const result = await this.gasCall('saveRecord', { record }, 25000, true);
             if (!result || result.status !== 'success' || result.saved !== true) throw new Error(result && result.message ? result.message : 'スプレッドシートへの保存を確認できませんでした。');
             this.setPendingOps(this.getPendingOps().filter(op => op.id !== record.id));
-            localStorage.setItem('hospital_last_sync', new Date().toISOString());
+            safeStore.set('hospital_last_sync', new Date().toISOString());
             this.connection = { gas: 'ok', token: 'ok', spreadsheet: 'ok', message: '保存先への接続OK' };
-            localStorage.setItem('hospital_connection_checked_v2', '1');
+            safeStore.set('hospital_connection_checked_v2', '1');
             this.showPopup(wasEditing ? '更新しました' : '保存しました', wasEditing ? '受診記録を更新し、スプレッドシートへの保存を確認しました。' : '受診記録を保存し、スプレッドシートへの保存を確認しました。');
             this.cancelEdit();
             this.syncNow(false, true).catch(e => console.warn(e));
@@ -955,7 +1099,7 @@
           this.setPendingOps(this.getPendingOps().filter(op => op.id !== id));
           this.records = this.records.filter(r => r.id !== id);
           this.saveLocalCache(); this.renderHistory();
-          localStorage.setItem('hospital_last_sync', new Date().toISOString());
+          safeStore.set('hospital_last_sync', new Date().toISOString());
           this.showPopup('削除しました', 'スプレッドシートから削除しました。PC・スマホの両方に反映されます。');
         } catch (e) {
           this.queuePendingDelete(id, rec.hospitalName);
@@ -992,7 +1136,7 @@
         }
         if (id === 'history') {
           this.renderHistory();
-          if (this.gasUrl && this.syncToken && localStorage.getItem('hospital_connection_checked_v2') === '1') {
+          if (this.gasUrl && this.syncToken && safeStore.get('hospital_connection_checked_v2') === '1') {
             this.syncNow(false, true).catch(e => console.warn(e));
           }
         } else if (id === 'record' && !this.editingId) window.scrollTo(0, 0);
@@ -1121,8 +1265,36 @@
       }
     };
 
-    console.info('YUZU Hospital Record FullSync v2.0');
-    document.addEventListener('DOMContentLoaded', () => app.init());
+    window.app = app;
+    window.safeStore = safeStore;
+
+    function surfaceRuntimeError(title, err) {
+      const message = String(err && err.message ? err.message : err || '不明なエラーです。');
+      console.error(title, err);
+      try {
+        if (window.app && typeof window.app.showPopup === 'function') {
+          window.app.showPopup(title, message + '\n\n入力内容は消していません。', true);
+        } else {
+          alert(title + '\n\n' + message);
+        }
+      } catch (_) {
+        try { alert(title + '\n\n' + message); } catch (_) {}
+      }
+    }
+
+    window.addEventListener('error', event => {
+      if (!event || !event.error) return;
+      surfaceRuntimeError('画面処理でエラーが発生しました', event.error);
+    });
+    window.addEventListener('unhandledrejection', event => {
+      if (!event) return;
+      surfaceRuntimeError('処理を完了できませんでした', event.reason || '不明なエラーです。');
+    });
+
+    console.info('YUZU Hospital Record FullSync v2.1');
+    document.addEventListener('DOMContentLoaded', () => {
+      app.init().catch(err => surfaceRuntimeError('初期化できませんでした', err));
+    });
 
   </script>
 </body>
