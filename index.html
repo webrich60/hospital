@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>病院・お薬 記録帳 v2.1</title>
+  <title>病院・お薬 記録帳 v2.2</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -18,7 +18,7 @@
           <div class="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
             <i data-lucide="hospital" class="w-6 h-6" stroke-width="2.5"></i>
           </div>
-          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.1</span> <span id="jsStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">JS確認中</span>
+          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.2</span> <span id="jsStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">JS確認中</span>
         </h1>
         <button type="button" onclick="app.syncNow(true)" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/40 px-2.5 py-1.5 rounded-lg text-xs font-bold">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i><span id="headerSyncText">同期</span>
@@ -126,7 +126,7 @@
       <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-5 border border-gray-300">
         <div class="flex items-center justify-between border-b border-gray-300 pb-2">
           <h2 class="text-lg font-bold flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2>
-          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.1</span>
+          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.2</span>
         </div>
 
         <div class="space-y-3">
@@ -215,7 +215,7 @@
   </div>
 
   <script>
-    const APP_VERSION = '2.1';
+    const APP_VERSION = '2.2';
     const defaultHospitals = [
       { name: 'ふくい南アイクリニック', type: '眼科' },
       { name: 'バプテスト眼科クリニック', type: '眼科' },
@@ -543,83 +543,217 @@
         return { ok: true };
       },
 
-      async gasCall(action, payload = {}, timeoutMs = 20000, useToken = true) {
+      makeRequestId() {
+        if (window.crypto && crypto.randomUUID) return `yuzu_${crypto.randomUUID()}`;
+        return `yuzu_${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+      },
+
+      async jsonpHealth(timeoutMs = 12000) {
         this.refreshSettingsFromInputs(true);
         if (!this.gasUrl) throw new Error('GAS URLが設定されていません。');
 
         return new Promise((resolve, reject) => {
-          const requestId = `yuzu_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-          const iframeName = `yuzu_frame_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_]/g, '');
-          const iframe = document.createElement('iframe');
-          iframe.name = iframeName;
-          iframe.setAttribute('aria-hidden', 'true');
-          iframe.tabIndex = -1;
-          iframe.style.position = 'fixed';
-          iframe.style.width = '1px';
-          iframe.style.height = '1px';
-          iframe.style.opacity = '0';
-          iframe.style.pointerEvents = 'none';
-          iframe.style.left = '-9999px';
-
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.action = this.gasUrl;
-          form.target = iframeName;
-          form.acceptCharset = 'UTF-8';
-          form.style.display = 'none';
-
-          const add = (name, value) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = name;
-            input.value = value == null ? '' : String(value);
-            form.appendChild(input);
-          };
-
-          add('transport', 'bridge');
-          add('rid', requestId);
-          add('action', action);
-          add('token', useToken ? this.syncToken : '');
-          add('payload', JSON.stringify(payload || {}));
-
+          const cbName = `__yuzu_health_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_$]/g, '_');
+          const script = document.createElement('script');
           let settled = false;
+
           const cleanup = () => {
-            window.removeEventListener('message', onMessage);
-            if (form.parentNode) form.parentNode.removeChild(form);
-            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+            if (script.parentNode) script.parentNode.removeChild(script);
           };
-          const finishReject = err => {
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error('GASの稼働確認(GET)に応答がありません。'));
+          }, timeoutMs);
+
+          window[cbName] = data => {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
             cleanup();
-            reject(err);
+            resolve(data);
           };
-          const onMessage = event => {
-            if (settled || event.source !== iframe.contentWindow) return;
-            const data = event.data;
-            if (!data || data.source !== 'YUZU_GAS_V2' || data.requestId !== requestId) return;
+          script.onerror = () => {
+            if (settled) return;
             settled = true;
             clearTimeout(timer);
             cleanup();
-            resolve(data.payload);
+            reject(new Error('GASの稼働確認(GET)を読み込めませんでした。'));
           };
 
-          const timer = setTimeout(() => {
-            finishReject(new Error('GASから応答がありませんでした。Webアプリの再デプロイとアクセス権を確認してください。'));
-          }, timeoutMs);
-
-          iframe.onerror = () => finishReject(new Error('GAS Webアプリを開けませんでした。URLを確認してください。'));
-          window.addEventListener('message', onMessage);
-          document.body.appendChild(iframe);
-          document.body.appendChild(form);
-
-          try {
-            form.submit();
-          } catch (e) {
-            finishReject(new Error('GASへの送信を開始できませんでした。'));
-          }
+          const sep = this.gasUrl.includes('?') ? '&' : '?';
+          script.src = `${this.gasUrl}${sep}action=health&callback=${encodeURIComponent(cbName)}&_=${Date.now()}`;
+          document.head.appendChild(script);
         });
+      },
+
+      async jsonpGetAllRecords(readTicket, timeoutMs = 25000) {
+        this.refreshSettingsFromInputs(true);
+        if (!this.gasUrl) throw new Error('GAS URLが設定されていません。');
+        if (!readTicket) throw new Error('履歴取得用チケットがありません。');
+
+        return new Promise((resolve, reject) => {
+          const cbName = `__yuzu_records_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_$]/g, '_');
+          const script = document.createElement('script');
+          let settled = false;
+          const cleanup = () => {
+            try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+            if (script.parentNode) script.parentNode.removeChild(script);
+          };
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error('スプレッドシート履歴の取得に時間がかかりすぎています。'));
+          }, timeoutMs);
+          window[cbName] = data => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(data);
+          };
+          script.onerror = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            reject(new Error('スプレッドシート履歴を読み込めませんでした。'));
+          };
+          const sep = this.gasUrl.includes('?') ? '&' : '?';
+          script.src = `${this.gasUrl}${sep}action=getAllRecords&ticket=${encodeURIComponent(readTicket)}&callback=${encodeURIComponent(cbName)}&_=${Date.now()}`;
+          document.head.appendChild(script);
+        });
+      },
+
+      async pollGasResult(requestId, timeoutMs = 20000) {
+        const started = Date.now();
+        let sawProcessing = false;
+        let sawEndpoint = false;
+
+        while (Date.now() - started < timeoutMs) {
+          const result = await new Promise((resolve, reject) => {
+            const cbName = `__yuzu_poll_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_$]/g, '_');
+            const script = document.createElement('script');
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+              if (script.parentNode) script.parentNode.removeChild(script);
+              reject(new Error('同期結果の確認に応答がありません。'));
+            }, 6000);
+
+            const cleanup = () => {
+              clearTimeout(timer);
+              try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+              if (script.parentNode) script.parentNode.removeChild(script);
+            };
+            window[cbName] = data => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              resolve(data);
+            };
+            script.onerror = () => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              reject(new Error('同期結果の確認を読み込めませんでした。'));
+            };
+
+            const sep = this.gasUrl.includes('?') ? '&' : '?';
+            script.src = `${this.gasUrl}${sep}action=poll&rid=${encodeURIComponent(requestId)}&callback=${encodeURIComponent(cbName)}&_=${Date.now()}`;
+            document.head.appendChild(script);
+          });
+
+          sawEndpoint = true;
+          if (result && result.status === 'processing') {
+            sawProcessing = true;
+          } else if (result && result.status === 'pending') {
+            // POSTがまだGASへ届いていない、または処理開始前。
+          } else if (result && result.status) {
+            return result;
+          }
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        if (!sawEndpoint) throw new Error('GASの結果確認(GET)に接続できませんでした。');
+        if (!sawProcessing) throw new Error('GASのGET接続はOKですが、POST送信がGASに到達していません。');
+        throw new Error('GASにはPOST送信できましたが、処理が時間内に完了しませんでした。');
+      },
+
+      async postGasRequest(action, payload = {}, timeoutMs = 20000, useToken = true) {
+        this.refreshSettingsFromInputs(true);
+        if (!this.gasUrl) throw new Error('GAS URLが設定されていません。');
+
+        const requestId = this.makeRequestId();
+        const iframeName = `yuzu_post_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_]/g, '');
+        const iframe = document.createElement('iframe');
+        iframe.name = iframeName;
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.tabIndex = -1;
+        iframe.style.position = 'fixed';
+        iframe.style.width = '1px';
+        iframe.style.height = '1px';
+        iframe.style.opacity = '0';
+        iframe.style.pointerEvents = 'none';
+        iframe.style.left = '-9999px';
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = this.gasUrl;
+        form.target = iframeName;
+        form.acceptCharset = 'UTF-8';
+        form.style.display = 'none';
+
+        const addInput = (name, value) => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = value == null ? '' : String(value);
+          form.appendChild(input);
+        };
+        addInput('transport', 'post-poll');
+        addInput('rid', requestId);
+        addInput('action', action);
+        addInput('token', useToken ? this.syncToken : '');
+        const payloadField = document.createElement('textarea');
+        payloadField.name = 'payload';
+        payloadField.value = JSON.stringify(payload || {});
+        payloadField.style.display = 'none';
+        form.appendChild(payloadField);
+
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        try {
+          form.submit();
+        } catch (e) {
+          if (form.parentNode) form.parentNode.removeChild(form);
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          throw new Error('GASへのPOST送信を開始できませんでした。');
+        }
+
+        try {
+          return await this.pollGasResult(requestId, timeoutMs);
+        } finally {
+          if (form.parentNode) form.parentNode.removeChild(form);
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }
+      },
+
+      async gasCall(action, payload = {}, timeoutMs = 20000, useToken = true) {
+        if (action === 'health') return this.jsonpHealth(timeoutMs);
+        if (action === 'getAllRecords') {
+          const ticketResult = await this.postGasRequest('getReadTicket', {}, Math.min(timeoutMs, 15000), true);
+          if (!ticketResult || ticketResult.status !== 'success' || !ticketResult.readTicket) {
+            throw new Error(ticketResult && ticketResult.message ? ticketResult.message : '履歴取得用チケットを発行できませんでした。');
+          }
+          return this.jsonpGetAllRecords(ticketResult.readTicket, timeoutMs);
+        }
+        return this.postGasRequest(action, payload, timeoutMs, useToken);
       },
 
       friendlySyncError(errorOrMessage) {
@@ -628,8 +762,10 @@
         if (/SYNC_TOKENが設定されていません/.test(raw)) return 'GAS側にSYNC_TOKENが設定されていません。\nApps Scriptで setupYuzu を1回実行するか、スクリプトプロパティにSYNC_TOKENを設定してください。';
         if (/SPREADSHEET_ID/.test(raw)) return raw + '\nGASのスクリプトプロパティ「SPREADSHEET_ID」を確認してください。';
         if (/保存先スプレッドシートを取得できません/.test(raw)) return raw + '\nApps Scriptで setupYuzu を1回実行すると設定できます。';
-        if (/応答がありません|タイムアウト/.test(raw)) return 'GASから応答がありません。\n① Code.gs v2.1を保存\n② Webアプリを新しいバージョンで再デプロイ\n③ アクセスできるユーザーを「全員」に設定\n④ /exec URLを使用\nを確認してください。';
-        if (/無効なアクション/.test(raw)) return 'GASが旧版です。Code.gs v2.1を上書きして、新しいバージョンとして再デプロイしてください。';
+        if (/POST送信がGASに到達していません/.test(raw)) return 'GASの稼働確認(GET)は通っていますが、POST送信が届いていません。\nCode.gs v2.2を新しいバージョンで再デプロイし、/exec URLを使ってください。';
+        if (/処理が時間内に完了/.test(raw)) return 'GASには送信できていますが、処理完了までに時間がかかっています。\nしばらく待って再実行してください。';
+        if (/応答がありません|タイムアウト|読み込めません/.test(raw)) return raw + '\nGASの/exec URLとネット接続を確認してください。';
+        if (/無効なアクション/.test(raw)) return 'GASが旧版です。Code.gs v2.2を上書きして、新しいバージョンとして再デプロイしてください。';
         return raw;
       },
 
@@ -681,14 +817,14 @@
 
         this.connection = { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: 'GASへ接続確認中…' };
         this.updateSyncStatus('診断中…');
-        if (showPopup) this.showProgressPopup('同期接続を診断中です', 'GAS → 同期キー → スプレッドシートの順に確認しています。');
+        if (showPopup) this.showProgressPopup('同期接続を診断中です', 'GAS(GET) → POST送信 → 同期キー → スプレッドシートの順に確認しています。');
 
         try {
           const health = await this.gasCall('health', {}, 12000, false);
           if (!health || health.status !== 'success') throw new Error(health && health.message ? health.message : 'GASの稼働確認に失敗しました。');
           this.connection.gas = 'ok';
 
-          if (String(health.appVersion || '') !== APP_VERSION || health.transport !== 'form-bridge-v2') {
+          if (String(health.appVersion || '') !== APP_VERSION || health.transport !== 'post-poll-v3') {
             throw new Error(`GASが旧バージョンです。現在のGAS: ${health.appVersion || '不明'} / 必要: ${APP_VERSION}`);
           }
           if (!health.syncTokenConfigured) {
@@ -1291,7 +1427,7 @@
       surfaceRuntimeError('処理を完了できませんでした', event.reason || '不明なエラーです。');
     });
 
-    console.info('YUZU Hospital Record FullSync v2.1');
+    console.info('YUZU Hospital Record FullSync v2.2');
     document.addEventListener('DOMContentLoaded', () => {
       app.init().catch(err => surfaceRuntimeError('初期化できませんでした', err));
     });
