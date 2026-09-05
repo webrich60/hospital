@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>病院・お薬 記録帳 v1.3</title>
+  <title>病院・お薬 記録帳 v1.4</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -18,7 +18,7 @@
           <div class="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
             <i data-lucide="hospital" class="w-6 h-6" stroke-width="2.5"></i>
           </div>
-          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v1.3</span>
+          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v1.4</span>
         </h1>
         <button type="button" onclick="app.syncNow(true)" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/40 px-2.5 py-1.5 rounded-lg text-xs font-bold">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i><span id="headerSyncText">同期</span>
@@ -124,7 +124,7 @@
 
       <!-- 設定タブ -->
       <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-4 border border-gray-200">
-        <div class="flex items-center justify-between border-b border-gray-300 pb-2"><h2 class="text-lg font-bold flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2><span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v1.3</span></div>
+        <div class="flex items-center justify-between border-b border-gray-300 pb-2"><h2 class="text-lg font-bold flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2><span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v1.4</span></div>
         <div class="space-y-3">
           <label class="block text-sm font-bold text-gray-900">GAS Webhook URL</label>
           <p class="text-xs text-gray-700 font-medium mb-2">AI分析とデータ保存のために、デプロイしたGASのURLを入力してください。</p>
@@ -332,7 +332,7 @@
         try {
           const localBeforeSync = Array.isArray(this.records) ? [...this.records] : [];
           await this.flushPendingOps();
-          let result = await this.jsonpRequest({ action: 'getAllRecords' }, 15000);
+          let result = await this.gasRequest({ action: 'getAllRecords' }, 15000);
           if (!result || result.status !== 'success' || !Array.isArray(result.records)) {
             throw new Error(result && result.message ? result.message : '履歴を取得できませんでした。');
           }
@@ -344,7 +344,7 @@
             if (rescue.length) {
               rescue.forEach(r => this.queuePendingSave(r));
               await this.flushPendingOps();
-              result = await this.jsonpRequest({ action: 'getAllRecords' }, 15000);
+              result = await this.gasRequest({ action: 'getAllRecords' }, 15000);
               if (!result || result.status !== 'success' || !Array.isArray(result.records)) {
                 throw new Error(result && result.message ? result.message : '旧端末データの救出後に履歴を再取得できませんでした。');
               }
@@ -398,7 +398,7 @@
           return 'GASから応答がありませんでした。\n新しいCode.gsを保存したあと、Webアプリを「新しいバージョン」で再デプロイしたか確認してください。';
         }
         if (/GASに接続できません/.test(raw)) {
-          return 'GAS Webアプリへ接続できません。\nURLが /exec で終わる最新のWebアプリURLか、デプロイのアクセス権が正しいか確認してください。';
+          return 'GAS Webアプリへ接続できません。\n① URLが「/exec」で終わっているか\n② Webアプリを新しいバージョンで再デプロイしたか\n③ アクセス権が実際に利用するGoogleアカウントで開ける設定か、を確認してください。';
         }
         if (/無効なアクション/.test(raw)) {
           return 'GASが旧バージョンの可能性があります。\nFullSync版のCode.gsを保存し、Webアプリを新しいバージョンとして再デプロイしてください。';
@@ -412,28 +412,43 @@
         const url = (urlInput && urlInput.value.trim()) || this.gasUrl;
         const token = (tokenInput && tokenInput.value.trim()) || this.syncToken;
         if (!url) return this.showPopup('診断できません', 'GAS Webhook URLを入力してください。', true);
+        if (!/\/exec(?:\?|$)/i.test(url)) return this.showPopup('診断できません', 'GAS WebアプリのURLは「/exec」で終わるURLを使用してください。\n「デプロイを管理」からWebアプリURLをコピーしてください。', true);
         if (!token) return this.showPopup('診断できません', '同期キー（SYNC_TOKEN）を入力してください。', true);
 
         this.gasUrl = url;
         this.syncToken = token;
         localStorage.setItem('hospital_gas_url', url);
         localStorage.setItem('hospital_sync_token', token);
+        localStorage.removeItem('hospital_connection_checked');
+        this.updateSyncStatus('診断中…');
+        this.showProgressPopup('同期接続を診断中です', 'GAS → 同期キー → スプレッドシートの順に確認しています。\n通常は数秒で結果が出ます。');
 
         try {
-          const health = await this.jsonpRequest({ action: 'health' }, 8000);
+          const health = await this.gasRequest({ action: 'health' }, 9000);
           if (!health || health.status !== 'success') throw new Error(health && health.message ? health.message : 'GASの稼働確認に失敗しました。');
+          if (health.bridgeVersion && Number(health.bridgeVersion) < 1) throw new Error('GASが旧バージョンです。');
         } catch (e) {
-          return this.showPopup('診断結果：GAS接続エラー', `${this.friendlySyncError(e)}\n\nまだスプレッドシート同期の確認まで進めていません。`, true);
+          localStorage.removeItem('hospital_connection_checked');
+          this.updateSyncStatus('GAS接続エラー');
+          return this.showPopup('診断結果：GAS接続エラー', `${this.friendlySyncError(e)}\n\nCode.gs v1.4を保存し、Webアプリを「新しいバージョン」で再デプロイしてください。`, true);
         }
 
         try {
-          const result = await this.jsonpRequest({ action: 'getAllRecords' }, 12000);
+          const result = await this.gasRequest({ action: 'getAllRecords' }, 12000);
           if (!result || result.status !== 'success' || !Array.isArray(result.records)) {
             throw new Error(result && result.message ? result.message : '履歴取得に失敗しました。');
           }
+          localStorage.setItem('hospital_connection_checked', '1');
+          localStorage.setItem('hospital_last_sync', new Date().toISOString());
+          localStorage.setItem('hospital_last_sync_error', '');
+          this.updateSyncStatus();
           this.showPopup('診断結果：接続OK', `GAS・同期キー・スプレッドシート接続は正常です。\n現在スプレッドシートから${result.records.length}件の記録を取得できます。`);
         } catch (e) {
-          this.showPopup('診断結果：同期設定エラー', this.friendlySyncError(e), true);
+          localStorage.removeItem('hospital_connection_checked');
+          const detail = this.friendlySyncError(e);
+          localStorage.setItem('hospital_last_sync_error', detail);
+          this.updateSyncStatus('同期設定エラー');
+          this.showPopup('診断結果：同期設定エラー', detail, true);
         }
       },
 
@@ -470,7 +485,75 @@
         });
       },
 
-      jsonpRequest(params, timeoutMs = 12000) {
+      async gasRequest(params, timeoutMs = 12000) {
+        // v1.4: Apps Script の JSONP が環境によって実行されないケースに備え、
+        // hidden iframe + postMessage のブリッジ方式を優先する。
+        // 旧GASとの互換用にJSONPもフォールバックとして残す。
+        const firstTimeout = Math.max(3500, Math.min(7000, Math.floor(timeoutMs * 0.6)));
+        try {
+          return await this.bridgeRequest(params, firstTimeout);
+        } catch (bridgeErr) {
+          console.warn('GAS bridge failed; trying JSONP fallback', bridgeErr);
+          return await this.jsonpRequestFallback(params, Math.max(3500, timeoutMs - firstTimeout));
+        }
+      },
+
+      bridgeRequest(params, timeoutMs = 7000) {
+        return new Promise((resolve, reject) => {
+          if (!this.gasUrl) return reject(new Error('GAS URLが設定されていません。'));
+          const requestId = `yuzu_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          const iframe = document.createElement('iframe');
+          iframe.setAttribute('aria-hidden', 'true');
+          iframe.tabIndex = -1;
+          iframe.style.position = 'fixed';
+          iframe.style.width = '1px';
+          iframe.style.height = '1px';
+          iframe.style.opacity = '0';
+          iframe.style.pointerEvents = 'none';
+          iframe.style.left = '-9999px';
+          let settled = false;
+
+          const cleanup = () => {
+            window.removeEventListener('message', onMessage);
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          };
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error('GAS応答がタイムアウトしました。'));
+          }, timeoutMs);
+          const onMessage = event => {
+            if (settled || event.source !== iframe.contentWindow) return;
+            const data = event.data;
+            if (!data || data.source !== 'YUZU_GAS_BRIDGE' || data.requestId !== requestId) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(data.payload);
+          };
+          window.addEventListener('message', onMessage);
+
+          const query = new URLSearchParams({
+            ...params,
+            token: this.syncToken,
+            transport: 'bridge',
+            rid: requestId,
+            _ts: Date.now().toString()
+          });
+          iframe.src = `${this.gasUrl}${this.gasUrl.includes('?') ? '&' : '?'}${query.toString()}`;
+          iframe.onerror = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            reject(new Error('GASに接続できませんでした。'));
+          };
+          document.body.appendChild(iframe);
+        });
+      },
+
+      jsonpRequestFallback(params, timeoutMs = 6000) {
         return new Promise((resolve, reject) => {
           if (!this.gasUrl) return reject(new Error('GAS URLが設定されていません。'));
           const callbackName = `__yuzuCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -501,7 +584,7 @@
       async verifyGasSave(id, hospitalName, retries = 3) {
         for (let i = 0; i < retries; i++) {
           try {
-            const result = await this.jsonpRequest({ action: 'checkRecord', id, hospitalName }, 7000);
+            const result = await this.gasRequest({ action: 'checkRecord', id, hospitalName }, 7000);
             if (result && result.status === 'success' && result.saved === true) return true;
           } catch (e) { console.error(e); }
           if (i < retries - 1) await new Promise(r => setTimeout(r, 900));
@@ -512,7 +595,7 @@
       async verifyGasDeletion(id, hospitalName, retries = 3) {
         for (let i = 0; i < retries; i++) {
           try {
-            const result = await this.jsonpRequest({ action: 'checkRecord', id, hospitalName }, 7000);
+            const result = await this.gasRequest({ action: 'checkRecord', id, hospitalName }, 7000);
             if (result && result.status === 'success' && result.saved === false) return true;
           } catch (e) { console.error(e); }
           if (i < retries - 1) await new Promise(r => setTimeout(r, 900));
@@ -530,7 +613,8 @@
           else if (!this.syncToken) text = '同期OFF（同期キー未設定）';
           else if (pending > 0) text = `未同期 ${pending}件`;
           else if (last) text = `同期済み ${new Date(last).toLocaleString('ja-JP')}`;
-          else text = '未接続（接続確認してください）';
+          else if (localStorage.getItem('hospital_connection_checked') === '1') text = '接続確認済み';
+          else text = '設定済み（接続確認待ち）';
         }
         ['syncStatusText', 'settingsSyncStatus'].forEach(id => {
           const el = document.getElementById(id); if (el) el.textContent = text;
@@ -900,18 +984,25 @@ ${msg}`);
         const url = document.getElementById('settingGasUrl').value.trim();
         const token = document.getElementById('settingSyncToken').value.trim();
         if (url && !/^https:\/\/script\.google\.com\//i.test(url)) return this.showPopup('設定できませんでした', 'GAS WebアプリのURLを入力してください。', true);
+        if (url && !/\/exec(?:\?|$)/i.test(url)) return this.showPopup('設定できませんでした', 'GAS WebアプリURLは「/exec」で終わるURLを使用してください。', true);
         if (url && !token) return this.showPopup('設定できませんでした', '同期キー（SYNC_TOKEN）を入力してください。', true);
         this.gasUrl = url;
         this.syncToken = token;
         localStorage.setItem('hospital_gas_url', url);
         localStorage.setItem('hospital_sync_token', token);
-        this.updateSyncStatus();
+        localStorage.removeItem('hospital_connection_checked');
+        this.updateSyncStatus('設定済み（接続確認中…）');
         if (!url) return this.showPopup('設定を解除しました', 'PC・スマホ同期はOFFになっています。');
 
+        this.showProgressPopup('GAS設定を保存しました', '続けてGASとスプレッドシートへの接続を確認しています。');
         const result = await this.syncNow(false);
         if (result && result.ok) {
+          localStorage.setItem('hospital_connection_checked', '1');
+          this.updateSyncStatus();
           this.showPopup('設定・接続確認完了', `GAS URLと同期キーを保存し、スプレッドシートとの接続も確認しました。\n現在${result.count || 0}件を同期しています。`);
         } else {
+          localStorage.removeItem('hospital_connection_checked');
+          this.updateSyncStatus('設定済み・接続エラー');
           const detail = result && result.message ? result.message : '同期接続を確認できませんでした。';
           this.showPopup('設定は保存しましたが、同期できません', `${detail}\n\n入力した設定はこの端末に保存されています。`, true);
         }
@@ -956,7 +1047,7 @@ ${msg}`);
       }
     };
 
-    console.info('YUZU Hospital Record FullSync v1.3');
+    console.info('YUZU Hospital Record FullSync v1.4');
     document.addEventListener('DOMContentLoaded', () => app.init());
   </script>
 </body>
