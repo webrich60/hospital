@@ -17,6 +17,9 @@
           </div>
           病院・お薬 記録帳
         </h1>
+        <button type="button" onclick="app.syncNow(true)" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/40 px-2.5 py-1.5 rounded-lg text-xs font-bold">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i><span id="headerSyncText">同期</span>
+        </button>
       </div>
     </header>
 
@@ -103,7 +106,16 @@
       </div>
 
       <!-- 履歴タブ -->
-      <div id="tab-history" class="hidden space-y-6">
+      <div id="tab-history" class="hidden space-y-4">
+        <div class="bg-white border-2 border-teal-200 rounded-xl p-3 shadow-sm flex items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold text-gray-600">PC・スマホ共通データ</p>
+            <p id="syncStatusText" class="text-sm font-bold text-gray-900">同期状態を確認中</p>
+          </div>
+          <button type="button" onclick="app.syncNow(true)" class="shrink-0 flex items-center gap-1.5 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-teal-700">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>今すぐ同期
+          </button>
+        </div>
         <div id="historyContainer" class="space-y-6"></div>
       </div>
 
@@ -114,9 +126,26 @@
           <label class="block text-sm font-bold text-gray-900">GAS Webhook URL</label>
           <p class="text-xs text-gray-700 font-medium mb-2">AI分析とデータ保存のために、デプロイしたGASのURLを入力してください。</p>
           <input type="url" id="settingGasUrl" class="w-full p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium" placeholder="https://script.google.com/...">
+          <label class="block text-sm font-bold text-gray-900 pt-2">同期キー（SYNC_TOKEN）</label>
+          <p class="text-xs text-gray-700 font-medium">PC・スマホで同じキーを使います。医療記録を保護するため必須です。</p>
+          <div class="flex gap-2">
+            <input type="password" id="settingSyncToken" class="flex-1 min-w-0 p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium" placeholder="SYNC_TOKEN">
+            <button type="button" onclick="app.generateSyncToken()" class="shrink-0 px-3 py-2 bg-white border border-gray-400 text-gray-900 rounded-lg text-xs font-bold hover:bg-gray-50">生成</button>
+          </div>
           <button onclick="app.saveGasUrl()" class="w-full flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-2.5 rounded-lg hover:bg-gray-900 transition shadow-sm">
             <i data-lucide="save" class="w-4 h-4"></i>GASの設定を保存する
           </button>
+          <div class="border-2 border-teal-200 bg-teal-50 rounded-lg p-3 space-y-2">
+            <p class="text-xs font-bold text-teal-900">PC・スマホ同期</p>
+            <p id="settingsSyncStatus" class="text-sm font-bold text-gray-900">同期状態を確認中</p>
+            <button type="button" onclick="app.syncNow(true)" class="w-full flex items-center justify-center gap-2 bg-teal-600 text-white font-bold py-2 rounded-lg hover:bg-teal-700">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>今すぐ同期する
+            </button>
+            <button type="button" onclick="app.copySyncSetupUrl()" class="w-full flex items-center justify-center gap-2 bg-white text-gray-900 border border-gray-400 font-bold py-2 rounded-lg hover:bg-gray-50">
+              <i data-lucide="smartphone" class="w-4 h-4"></i>スマホ用の同期設定URLをコピー
+            </button>
+            <p class="text-xs text-gray-700 font-medium">スマホで上の共有URLを1回開けば、同じGAS URLが自動設定されます。</p>
+          </div>
         </div>
       </div>
     </main>
@@ -153,38 +182,320 @@
     ];
 
     const app = {
-      records: [], hospitals: [], gasUrl: '', editingId: null, images: [], recognition: null, activeTargetId: null,
+      records: [],
+      hospitals: [],
+      gasUrl: '',
+      syncToken: '',
+      editingId: null,
+      images: [],
+      recognition: null,
+      activeTargetId: null,
+      syncing: false,
 
-      init() {
-        const savedRecords = localStorage.getItem('hospital_records');
-        if (savedRecords) this.records = JSON.parse(savedRecords);
-        const savedGasUrl = localStorage.getItem('hospital_gas_url');
-        if (savedGasUrl) { this.gasUrl = savedGasUrl; document.getElementById('settingGasUrl').value = this.gasUrl; }
-        
-        const savedHospitals = localStorage.getItem('hospital_list');
-        if (savedHospitals) {
-          let parsed = JSON.parse(savedHospitals);
-          let updated = false;
-          parsed = parsed.map(h => {
-            if (h.name === '松本耳鼻咽喉科クリニック') { updated = true; return { ...h, name: 'まつもと耳鼻咽喉科クリニック' }; }
-            return h;
-          });
-          this.hospitals = parsed;
-          if (updated) localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
-        } else {
-          this.hospitals = defaultHospitals;
-          localStorage.setItem('hospital_list', JSON.stringify(defaultHospitals));
-        }
+      async init() {
+        this.loadLocalCache();
+        this.importGasUrlFromQuery();
+        this.renderHospitalOptions();
+        this.renderHistory();
+        this.updateSyncStatus();
         document.getElementById('formDate').value = new Date().toISOString().split('T')[0];
-        this.renderHospitalOptions(); lucide.createIcons(); this.initSpeechRecognition();
+        lucide.createIcons();
+        this.initSpeechRecognition();
+
+        if (this.gasUrl) {
+          await this.syncNow(false);
+        }
+      },
+
+      loadLocalCache() {
+        try {
+          this.records = JSON.parse(localStorage.getItem('hospital_records') || '[]');
+        } catch (_) { this.records = []; }
+
+        const savedGasUrl = localStorage.getItem('hospital_gas_url') || '';
+        const savedSyncToken = localStorage.getItem('hospital_sync_token') || '';
+        this.gasUrl = savedGasUrl;
+        this.syncToken = savedSyncToken;
+        const gasInput = document.getElementById('settingGasUrl');
+        const tokenInput = document.getElementById('settingSyncToken');
+        if (gasInput) gasInput.value = savedGasUrl;
+        if (tokenInput) tokenInput.value = savedSyncToken;
+
+        let savedHospitals = [];
+        try { savedHospitals = JSON.parse(localStorage.getItem('hospital_list') || '[]'); } catch (_) {}
+        this.hospitals = this.mergeHospitals(defaultHospitals, savedHospitals);
+      },
+
+      importGasUrlFromQuery() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const sharedGas = params.get('gas');
+          const sharedToken = params.get('token');
+          if (sharedGas && /^https:\/\/script\.google\.com\//i.test(sharedGas)) {
+            this.gasUrl = sharedGas.trim();
+            localStorage.setItem('hospital_gas_url', this.gasUrl);
+            const el = document.getElementById('settingGasUrl');
+            if (el) el.value = this.gasUrl;
+          }
+          if (sharedToken) {
+            this.syncToken = sharedToken.trim();
+            localStorage.setItem('hospital_sync_token', this.syncToken);
+            const tokenEl = document.getElementById('settingSyncToken');
+            if (tokenEl) tokenEl.value = this.syncToken;
+          }
+          if (sharedGas || sharedToken) {
+            params.delete('gas');
+            params.delete('token');
+            const clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+            history.replaceState(null, '', clean);
+          }
+        } catch (e) { console.warn(e); }
+      },
+
+      mergeHospitals(...lists) {
+        const map = new Map();
+        lists.flat().forEach(h => {
+          if (!h || !h.name) return;
+          let name = h.name === '松本耳鼻咽喉科クリニック' ? 'まつもと耳鼻咽喉科クリニック' : String(h.name).trim();
+          if (!name) return;
+          const old = map.get(name);
+          map.set(name, { name, type: String((old && old.type) || h.type || '') });
+        });
+        return Array.from(map.values());
+      },
+
+      getPendingOps() {
+        try { return JSON.parse(localStorage.getItem('hospital_pending_ops') || '[]'); }
+        catch (_) { return []; }
+      },
+
+      setPendingOps(ops) {
+        localStorage.setItem('hospital_pending_ops', JSON.stringify(ops || []));
+        this.updateSyncStatus();
+      },
+
+      queuePendingSave(record) {
+        let ops = this.getPendingOps().filter(op => op && op.id !== record.id);
+        ops.push({ type: 'save', id: record.id, record, hospitalName: record.hospitalName, queuedAt: new Date().toISOString() });
+        this.setPendingOps(ops);
+      },
+
+      queuePendingDelete(id, hospitalName) {
+        let ops = this.getPendingOps().filter(op => op && op.id !== id);
+        ops.push({ type: 'delete', id, hospitalName, queuedAt: new Date().toISOString() });
+        this.setPendingOps(ops);
+      },
+
+      saveLocalCache() {
+        localStorage.setItem('hospital_records', JSON.stringify(this.records));
+        localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
+      },
+
+      applyPendingOpsToRecords(records) {
+        let merged = Array.isArray(records) ? [...records] : [];
+        this.getPendingOps().forEach(op => {
+          if (!op || !op.id) return;
+          if (op.type === 'delete') {
+            merged = merged.filter(r => r.id !== op.id);
+          } else if (op.type === 'save' && op.record) {
+            const idx = merged.findIndex(r => r.id === op.id);
+            if (idx >= 0) merged[idx] = op.record;
+            else merged.unshift(op.record);
+          }
+        });
+        return merged;
+      },
+
+      async syncNow(showResult = true) {
+        if (this.syncing) return;
+        if (!this.gasUrl) {
+          this.updateSyncStatus('GAS URL未設定');
+          if (showResult) this.showPopup('同期できませんでした', '設定タブでGAS Webhook URLを設定してください。', true);
+          return;
+        }
+        if (!this.syncToken) {
+          this.updateSyncStatus('同期キー未設定');
+          if (showResult) this.showPopup('同期できませんでした', '設定タブで同期キー（SYNC_TOKEN）を設定してください。', true);
+          return;
+        }
+
+        this.syncing = true;
+        this.updateSyncStatus('同期中…');
+        try {
+          const localBeforeSync = Array.isArray(this.records) ? [...this.records] : [];
+          await this.flushPendingOps();
+          let result = await this.jsonpRequest({ action: 'getAllRecords' }, 15000);
+          if (!result || result.status !== 'success' || !Array.isArray(result.records)) {
+            throw new Error(result && result.message ? result.message : '履歴を取得できませんでした。');
+          }
+
+          // FullSync初回だけ、旧版のlocalStorageにしか残っていない記録を救出する。
+          // 8月以降など、GAS保存失敗中に端末内だけ残ったデータを消さないための移行処理。
+          if (localStorage.getItem('hospital_fullsync_migrated_v1') !== '1' && localBeforeSync.length) {
+            const serverIds = new Set(result.records.map(r => r && r.id).filter(Boolean));
+            const rescue = localBeforeSync.filter(r => r && r.id && r.hospitalName && !serverIds.has(r.id));
+            if (rescue.length) {
+              rescue.forEach(r => this.queuePendingSave(r));
+              await this.flushPendingOps();
+              result = await this.jsonpRequest({ action: 'getAllRecords' }, 15000);
+              if (!result || result.status !== 'success' || !Array.isArray(result.records)) {
+                throw new Error('旧端末データの救出後に履歴を再取得できませんでした。');
+              }
+            }
+            localStorage.setItem('hospital_fullsync_migrated_v1', '1');
+          }
+
+          this.records = this.applyPendingOpsToRecords(result.records);
+          this.hospitals = this.mergeHospitals(defaultHospitals, this.hospitals, result.hospitals || [], this.records.map(r => ({ name: r.hospitalName, type: r.hospitalType })));
+          this.saveLocalCache();
+          localStorage.setItem('hospital_last_sync', new Date().toISOString());
+          this.renderHospitalOptions();
+          this.renderHistory();
+          this.updateSyncStatus();
+
+          if (showResult) {
+            const pending = this.getPendingOps().length;
+            if (pending === 0) this.showPopup('同期しました', `PC・スマホ共通のスプレッドシートから最新の${this.records.length}件を読み込みました。`);
+            else this.showPopup('一部同期できませんでした', `${this.records.length}件を読み込みましたが、未送信の変更が${pending}件残っています。通信状態を確認してもう一度同期してください。`, true);
+          }
+        } catch (e) {
+          console.error(e);
+          this.updateSyncStatus('同期エラー');
+          if (showResult) this.showPopup('同期できませんでした', 'スプレッドシートから最新履歴を取得できませんでした。GAS URL・デプロイ・権限・通信状態を確認してください。\n\nこの端末に保存済みの履歴は消していません。', true);
+        } finally {
+          this.syncing = false;
+          this.updateSyncStatus();
+        }
+      },
+
+      async flushPendingOps() {
+        const original = this.getPendingOps();
+        if (!original.length) return;
+        const remaining = [];
+
+        for (const op of original) {
+          try {
+            if (op.type === 'save' && op.record) {
+              await this.postNoCors({ action: 'saveRecord', record: op.record });
+              const ok = await this.verifyGasSave(op.id, op.record.hospitalName, 3);
+              if (!ok) remaining.push(op);
+            } else if (op.type === 'delete') {
+              await this.postNoCors({ action: 'deleteRecord', id: op.id, hospitalName: op.hospitalName || '' });
+              const ok = await this.verifyGasDeletion(op.id, op.hospitalName || '', 3);
+              if (!ok) remaining.push(op);
+            }
+          } catch (e) {
+            console.error('pending op failed', e);
+            remaining.push(op);
+          }
+        }
+        this.setPendingOps(remaining);
+      },
+
+      postNoCors(body) {
+        return fetch(this.gasUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ ...body, token: this.syncToken })
+        });
+      },
+
+      jsonpRequest(params, timeoutMs = 12000) {
+        return new Promise((resolve, reject) => {
+          if (!this.gasUrl) return reject(new Error('GAS URLが設定されていません。'));
+          const callbackName = `__yuzuCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          const script = document.createElement('script');
+          let settled = false;
+          const cleanup = () => {
+            if (script.parentNode) script.parentNode.removeChild(script);
+            try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
+          };
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true; cleanup(); reject(new Error('GAS応答がタイムアウトしました。'));
+          }, timeoutMs);
+          window[callbackName] = result => {
+            if (settled) return;
+            settled = true; clearTimeout(timer); cleanup(); resolve(result);
+          };
+          const query = new URLSearchParams({ ...params, token: this.syncToken, callback: callbackName, _ts: Date.now().toString() });
+          script.src = `${this.gasUrl}${this.gasUrl.includes('?') ? '&' : '?'}${query.toString()}`;
+          script.onerror = () => {
+            if (settled) return;
+            settled = true; clearTimeout(timer); cleanup(); reject(new Error('GASに接続できませんでした。'));
+          };
+          document.head.appendChild(script);
+        });
+      },
+
+      async verifyGasSave(id, hospitalName, retries = 3) {
+        for (let i = 0; i < retries; i++) {
+          try {
+            const result = await this.jsonpRequest({ action: 'checkRecord', id, hospitalName });
+            if (result && result.status === 'success' && result.saved === true) return true;
+          } catch (e) { console.error(e); }
+          if (i < retries - 1) await new Promise(r => setTimeout(r, 900));
+        }
+        return false;
+      },
+
+      async verifyGasDeletion(id, hospitalName, retries = 3) {
+        for (let i = 0; i < retries; i++) {
+          try {
+            const result = await this.jsonpRequest({ action: 'checkRecord', id, hospitalName });
+            if (result && result.status === 'success' && result.saved === false) return true;
+          } catch (e) { console.error(e); }
+          if (i < retries - 1) await new Promise(r => setTimeout(r, 900));
+        }
+        return false;
+      },
+
+      updateSyncStatus(forcedText = '') {
+        const pending = this.getPendingOps().length;
+        const last = localStorage.getItem('hospital_last_sync');
+        let text = forcedText;
+        if (!text) {
+          if (this.syncing) text = '同期中…';
+          else if (!this.gasUrl) text = '同期OFF（GAS未設定）';
+          else if (!this.syncToken) text = '同期OFF（同期キー未設定）';
+          else if (pending > 0) text = `未同期 ${pending}件`;
+          else if (last) text = `同期済み ${new Date(last).toLocaleString('ja-JP')}`;
+          else text = '同期準備OK';
+        }
+        ['syncStatusText', 'settingsSyncStatus'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.textContent = text;
+        });
+        const header = document.getElementById('headerSyncText');
+        if (header) header.textContent = this.syncing ? '同期中' : (pending > 0 ? `未同期${pending}` : '同期');
+      },
+
+      async copySyncSetupUrl() {
+        const input = document.getElementById('settingGasUrl');
+        const tokenInput = document.getElementById('settingSyncToken');
+        const url = (input && input.value.trim()) || this.gasUrl;
+        const token = (tokenInput && tokenInput.value.trim()) || this.syncToken;
+        if (!url) return this.showPopup('コピーできませんでした', '先にGAS Webhook URLを設定してください。', true);
+        if (!token) return this.showPopup('コピーできませんでした', '先に同期キー（SYNC_TOKEN）を設定してください。', true);
+        try {
+          const share = new URL(window.location.href);
+          share.searchParams.set('gas', url);
+          share.searchParams.set('token', token);
+          await navigator.clipboard.writeText(share.toString());
+          this.showPopup('スマホ用URLをコピーしました', 'このURLをスマホで1回開くと、同じGAS同期設定が自動登録されます。');
+        } catch (e) {
+          console.error(e);
+          this.showPopup('コピーできませんでした', 'ブラウザのクリップボード権限を確認してください。', true);
+        }
       },
 
       initSpeechRecognition() {
         window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (window.SpeechRecognition) {
           this.recognition = new SpeechRecognition();
-          this.recognition.lang = 'ja-JP'; this.recognition.continuous = true;
-          this.recognition.onresult = (e) => {
+          this.recognition.lang = 'ja-JP';
+          this.recognition.continuous = true;
+          this.recognition.onresult = e => {
             let finalT = '';
             for (let i = e.resultIndex; i < e.results.length; ++i) if (e.results[i].isFinal) finalT += e.results[i][0].transcript;
             if (finalT && this.activeTargetId) {
@@ -193,18 +504,20 @@
             }
           };
           this.recognition.onend = () => this.resetMicUI();
-          this.recognition.onerror = (e) => { this.resetMicUI(); if (e.error === 'not-allowed') alert("マイクが許可されていません。"); };
+          this.recognition.onerror = e => { this.resetMicUI(); if (e.error === 'not-allowed') alert('マイクが許可されていません。'); };
         }
       },
+
       toggleSpeechRecognition(id) {
-        if (!this.recognition) return alert("音声入力非対応ブラウザです。");
+        if (!this.recognition) return alert('音声入力非対応ブラウザです。');
         if (this.activeTargetId === id) { this.recognition.stop(); this.resetMicUI(); }
         else {
           if (this.activeTargetId) { this.recognition.stop(); this.resetMicUI(); }
           this.activeTargetId = id; this.updateMicUI(id, true);
-          try { this.recognition.start(); } catch (e) { this.resetMicUI(); }
+          try { this.recognition.start(); } catch (_) { this.resetMicUI(); }
         }
       },
+
       updateMicUI(id, isRec) {
         const icon = document.getElementById(`micIcon-${id}`), text = document.getElementById(`micText-${id}`);
         if (!icon) return;
@@ -214,22 +527,22 @@
           btn.classList.replace('bg-teal-50', 'bg-red-50'); btn.classList.replace('border-teal-200', 'border-red-200'); btn.classList.replace('text-teal-600', 'text-red-600'); btn.classList.add('animate-pulse');
         }
       },
+
       resetMicUI() {
-        if (this.activeTargetId) {
-          const icon = document.getElementById(`micIcon-${this.activeTargetId}`), text = document.getElementById(`micText-${this.activeTargetId}`);
-          if (icon) {
-            const btn = icon.closest('button');
-            icon.classList.remove('text-red-500'); text.innerText = '音声入力';
-            btn.classList.replace('bg-red-50', 'bg-teal-50'); btn.classList.replace('border-red-200', 'border-teal-200'); btn.classList.replace('text-red-600', 'text-teal-600'); btn.classList.remove('animate-pulse');
-          }
-          this.activeTargetId = null;
+        if (!this.activeTargetId) return;
+        const icon = document.getElementById(`micIcon-${this.activeTargetId}`), text = document.getElementById(`micText-${this.activeTargetId}`);
+        if (icon) {
+          const btn = icon.closest('button');
+          icon.classList.remove('text-red-500'); text.innerText = '音声入力';
+          btn.classList.replace('bg-red-50', 'bg-teal-50'); btn.classList.replace('border-red-200', 'border-teal-200'); btn.classList.replace('text-red-600', 'text-teal-600'); btn.classList.remove('animate-pulse');
         }
+        this.activeTargetId = null;
       },
 
       handleImageChange(e) {
         const file = e.target.files[0];
         if (!file) return;
-        if (this.images.length >= 5) { this.showPopup("エラー", "画像は最大5枚までです。", true); e.target.value = ''; return; }
+        if (this.images.length >= 5) { this.showPopup('エラー', '画像は最大5枚までです。', true); e.target.value = ''; return; }
         const reader = new FileReader();
         reader.onloadend = () => {
           this.images.push({ id: Date.now().toString(), dataUrl: reader.result, base64: reader.result.split(',')[1], mimeType: file.type, status: 'pending' });
@@ -237,7 +550,9 @@
         };
         reader.readAsDataURL(file); e.target.value = '';
       },
+
       removeImage(id) { this.images = this.images.filter(i => i.id !== id); this.renderImageList(); },
+
       renderImageList() {
         const container = document.getElementById('imageListContainer');
         document.getElementById('imageCountDisplay').innerText = `${this.images.length} / 5枚`;
@@ -252,40 +567,39 @@
             btn = `<button onclick="app.analyzeSingleImage('${img.id}')" ${isAnalyzing ? 'disabled' : ''} class="text-xs flex items-center gap-1 text-white px-3 py-1.5 rounded font-bold shadow-sm transition-colors ${cls}"><i data-lucide="upload" class="w-4 h-4"></i> AIで分析</button>`;
           } else if (img.status === 'analyzing') {
             btn = `<button disabled class="text-xs flex items-center gap-1 bg-gray-400 text-white px-3 py-1.5 rounded font-bold opacity-80"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 解析中...</button>`;
-          } else if (img.status === 'done') {
+          } else {
             btn = `<span class="text-xs flex items-center gap-1 text-teal-700 font-bold bg-teal-100 px-3 py-1.5 rounded border border-teal-300"><i data-lucide="check-circle" class="w-4 h-4"></i> 分析完了</span>`;
           }
-          html += `<div class="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-300 shadow-sm"><div class="flex items-center gap-3"><img src="${img.dataUrl}" class="w-12 h-12 object-cover rounded border border-gray-200"><span class="text-sm font-bold text-gray-700">写真 ${idx + 1}</span></div><div class="flex items-center gap-2">${btn}<button onclick="app.removeImage('${img.id}')" class="text-red-400 hover:text-red-600 p-1" ${img.status==='analyzing'?'disabled':''}><i data-lucide="trash-2" class="w-5 h-5"></i></button></div></div>`;
+          html += `<div class="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-300 shadow-sm"><div class="flex items-center gap-3"><img src="${img.dataUrl}" class="w-12 h-12 object-cover rounded border border-gray-200"><span class="text-sm font-bold text-gray-700">写真 ${idx + 1}</span></div><div class="flex items-center gap-2">${btn}<button onclick="app.removeImage('${img.id}')" class="text-red-500 hover:text-red-700 p-1" ${img.status==='analyzing'?'disabled':''}><i data-lucide="trash-2" class="w-5 h-5"></i></button></div></div>`;
         });
         container.innerHTML = html; lucide.createIcons();
       },
+
       async analyzeSingleImage(id) {
-        if (!this.gasUrl) return this.showPopup("エラー", "設定タブからGASのURLを設定してください。", true);
+        if (!this.gasUrl || !this.syncToken) return this.showPopup('解析できません', '設定タブでGAS URLと同期キー（SYNC_TOKEN）を設定してください。', true);
         const img = this.images.find(i => i.id === id); if (!img) return;
         img.status = 'analyzing'; this.renderImageList();
         try {
-          const res = await fetch(this.gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'analyzeImage', mimeType: img.mimeType, base64Data: img.base64 }) });
+          const res = await fetch(this.gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'analyzeImage', token: this.syncToken, mimeType: img.mimeType, base64Data: img.base64 }) });
           const result = await res.json();
-          if (result.status === 'success') {
-            const el = document.getElementById('formMedicines');
-            if(el) el.value = el.value ? el.value + '\n\n【写真のAI追記】\n' + result.text : result.text;
-            img.status = 'done';
-          } else throw new Error(result.message);
+          if (result.status !== 'success') throw new Error(result.message || '解析失敗');
+          const el = document.getElementById('formMedicines');
+          if (el) el.value = el.value ? el.value + '\n\n【写真のAI追記】\n' + result.text : result.text;
+          img.status = 'done';
         } catch (e) {
-          console.error(e);
-          this.showPopup("解析エラー", "AI解析中にエラーが発生しました。\nGASの設定やAPIキーを確認してください。", true);
-          img.status = 'pending';
+          console.error(e); img.status = 'pending';
+          this.showPopup('解析エラー', 'AI解析中にエラーが発生しました。GAS設定やAPIキーを確認してください。', true);
         } finally { this.renderImageList(); }
       },
 
       async handleSave() {
         const select = document.getElementById('formHospitalSelect')?.value;
         let hName = '', hType = '', isNew = false;
-        if (!select) return this.showPopup("エラー", "病院名を選択してください。", true);
+        if (!select) return this.showPopup('保存できませんでした', '病院名を選択してください。', true);
         if (select === 'new') {
           hName = document.getElementById('formNewHospitalName')?.value.trim();
           hType = document.getElementById('formNewHospitalType')?.value.trim();
-          if (!hName) return this.showPopup("エラー", "病院名を入力してください。", true);
+          if (!hName) return this.showPopup('保存できませんでした', '病院名を入力してください。', true);
           isNew = true;
         } else {
           hName = select;
@@ -293,142 +607,221 @@
           if (target) hType = target.type || '';
         }
 
-        const date = document.getElementById('formDate')?.value || '';
-        const tDoc = document.getElementById('formToldDoctor')?.value || '';
-        const dSaid = document.getElementById('formDoctorSaid')?.value || '';
-        const eDet = document.getElementById('formExamDetails')?.value || '';
-        const meds = document.getElementById('formMedicines')?.value || '';
+        const wasEditing = !!this.editingId;
+        const record = {
+          id: this.editingId || Date.now().toString(),
+          hospitalName: hName,
+          hospitalType: hType,
+          date: document.getElementById('formDate')?.value || '',
+          toldDoctor: document.getElementById('formToldDoctor')?.value || '',
+          doctorSaid: document.getElementById('formDoctorSaid')?.value || '',
+          examDetails: document.getElementById('formExamDetails')?.value || '',
+          medicines: document.getElementById('formMedicines')?.value || '',
+          timestamp: new Date().toISOString()
+        };
 
-        if (isNew) {
-          this.hospitals.push({ name: hName, type: hType });
-          localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
-          this.renderHospitalOptions();
+        if (isNew) this.hospitals = this.mergeHospitals(this.hospitals, [{ name: hName, type: hType }]);
+        const idx = this.records.findIndex(r => r.id === record.id);
+        if (idx >= 0) this.records[idx] = record; else this.records.unshift(record);
+        this.saveLocalCache();
+
+        if (!this.gasUrl || !this.syncToken) {
+          this.queuePendingSave(record);
+          return this.showPopup('クラウド保存できませんでした', 'この端末には一時保存しましたが、GAS URLまたは同期キーが未設定のためPC・スマホには同期されていません。設定タブを確認してください。', true);
         }
 
-        let newRec = { id: this.editingId || Date.now().toString(), hospitalName: hName, hospitalType: hType, date: date, toldDoctor: tDoc, doctorSaid: dSaid, examDetails: eDet, medicines: meds, timestamp: new Date().toISOString() };
-        if (this.editingId) this.records = this.records.map(r => r.id === this.editingId ? newRec : r);
-        else this.records.unshift(newRec);
+        try {
+          await this.postNoCors({ action: 'saveRecord', record });
+          const ok = await this.verifyGasSave(record.id, record.hospitalName, 3);
+          if (!ok) throw new Error('保存確認失敗');
 
-        localStorage.setItem('hospital_records', JSON.stringify(this.records));
+          this.setPendingOps(this.getPendingOps().filter(op => op.id !== record.id));
+          await this.syncNow(false);
+          this.showPopup(wasEditing ? '更新しました' : '保存しました', wasEditing
+            ? '受診記録を更新しました。PC・スマホの両方に同期されます。'
+            : '受診記録を保存しました。PC・スマホの両方に同期されます。');
+          this.cancelEdit();
+        } catch (e) {
+          console.error(e);
+          this.queuePendingSave(record);
+          this.showPopup('クラウド保存できませんでした', 'この端末には一時保存しましたが、スプレッドシートへの保存を確認できませんでした。入力内容は消していません。通信復旧後に「今すぐ同期」を押すと再送します。', true);
+        }
+      },
 
-        let gasSuccess = false, failMsg = '';
-        if (this.gasUrl) {
-          try {
-            await fetch(this.gasUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveRecord', record: newRec }) });
-            gasSuccess = true;
-          } catch(e) { console.error(e); failMsg = "通信エラーが発生しました。"; }
+      async deleteRecord(id) {
+        const rec = this.records.find(r => r.id === id);
+        if (!rec) return;
+        if (!confirm('この記録を削除しますか？\nPC・スマホの両方から削除されます。')) return;
+
+        if (!this.gasUrl || !this.syncToken) {
+          this.queuePendingDelete(id, rec.hospitalName);
+          this.records = this.records.filter(r => r.id !== id);
+          this.saveLocalCache(); this.renderHistory();
+          return this.showPopup('クラウド削除できませんでした', 'この端末では非表示にしましたが、GAS URLまたは同期キーが未設定のため他の端末にはまだ残っています。設定後に同期すると削除を反映します。', true);
         }
 
-        const title = this.editingId ? "編集完了" : "保存完了";
-        let msg = 'ローカル保存が完了しました！'; let isErr = false;
-        if (this.gasUrl) {
-          if (gasSuccess) msg = 'スプレッドシートへの送信が完了しました！';
-          else { msg = `ローカル保存完了。GASへの送信失敗:\n${failMsg}`; isErr = true; }
+        try {
+          await this.postNoCors({ action: 'deleteRecord', id, hospitalName: rec.hospitalName });
+          const ok = await this.verifyGasDeletion(id, rec.hospitalName, 3);
+          if (!ok) throw new Error('削除確認失敗');
+          this.setPendingOps(this.getPendingOps().filter(op => op.id !== id));
+          this.records = this.records.filter(r => r.id !== id);
+          this.saveLocalCache();
+          await this.syncNow(false);
+          this.renderHistory();
+          this.showPopup('削除しました', 'この記録をスプレッドシートから削除しました。PC・スマホの両方に反映されます。');
+        } catch (e) {
+          console.error(e);
+          this.queuePendingDelete(id, rec.hospitalName);
+          this.records = this.records.filter(r => r.id !== id);
+          this.saveLocalCache(); this.renderHistory();
+          this.showPopup('削除を同期できませんでした', 'この端末では非表示にしました。通信復旧後に「今すぐ同期」を押すと、他の端末にも削除を反映します。', true);
         }
-        this.showPopup(title, msg, isErr);
-        this.cancelEdit();
       },
 
       cancelEdit() {
         this.editingId = null;
-        if(document.getElementById('formHospitalSelect')) document.getElementById('formHospitalSelect').value = '';
+        const select = document.getElementById('formHospitalSelect'); if (select) select.value = '';
         this.handleHospitalSelectChange('');
-        ['formNewHospitalName', 'formNewHospitalType', 'formToldDoctor', 'formDoctorSaid', 'formExamDetails', 'formMedicines'].forEach(id => {
-          const el = document.getElementById(id); if (el) el.value = '';
-        });
+        ['formNewHospitalName', 'formNewHospitalType', 'formToldDoctor', 'formDoctorSaid', 'formExamDetails', 'formMedicines'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const dateEl = document.getElementById('formDate'); if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
         this.images = []; this.renderImageList();
         const imgInput = document.getElementById('formImageInput'); if (imgInput) imgInput.value = '';
-        document.getElementById('formTitle').innerText = "新しい受診記録";
+        document.getElementById('formTitle').innerText = '新しい受診記録';
         document.getElementById('formCancelEditBtn').classList.add('hidden');
       },
 
-      switchTab(id) {
+      async switchTab(id) {
         ['record', 'history', 'settings'].forEach(t => {
-          document.getElementById('tab-'+t).classList.add('hidden');
-          const nav = document.getElementById('nav-'+t);
+          document.getElementById('tab-' + t).classList.add('hidden');
+          const nav = document.getElementById('nav-' + t);
           nav.classList.remove('text-teal-600'); nav.classList.add('text-gray-400');
         });
-        document.getElementById('tab-'+id).classList.remove('hidden');
-        const activeNav = document.getElementById('nav-'+id);
+        document.getElementById('tab-' + id).classList.remove('hidden');
+        const activeNav = document.getElementById('nav-' + id);
         activeNav.classList.remove('text-gray-400'); activeNav.classList.add('text-teal-600');
-        if (id === 'history') this.renderHistory(); else if (id === 'record' && !this.editingId) window.scrollTo(0, 0);
+        if (id === 'history') {
+          this.renderHistory();
+          if (this.gasUrl) await this.syncNow(false);
+        } else if (id === 'record' && !this.editingId) window.scrollTo(0, 0);
       },
+
       renderHospitalOptions() {
         const select = document.getElementById('formHospitalSelect');
-        select.innerHTML = '<option value="" disabled selected>選択してください</option>';
-        this.hospitals.forEach(h => { const opt = document.createElement('option'); opt.value = h.name; opt.innerText = `${h.name} ${h.type ? `(${h.type})` : ''}`; select.appendChild(opt); });
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="" disabled>選択してください</option>';
+        this.hospitals.forEach(h => {
+          const opt = document.createElement('option'); opt.value = h.name; opt.innerText = `${h.name} ${h.type ? `(${h.type})` : ''}`; select.appendChild(opt);
+        });
         const newOpt = document.createElement('option'); newOpt.value = 'new'; newOpt.innerText = '+ 新しく病院を追加する'; select.appendChild(newOpt);
+        if (current && Array.from(select.options).some(o => o.value === current)) select.value = current; else select.value = '';
       },
+
       handleHospitalSelectChange(val) {
         const c = document.getElementById('formNewHospitalContainer'), i = document.getElementById('formNewHospitalName');
-        if (val === 'new') { c.classList.remove('hidden'); i.required = true; } else { c.classList.add('hidden'); i.required = false; }
+        if (val === 'new') { c.classList.remove('hidden'); i.required = true; }
+        else { c.classList.add('hidden'); i.required = false; }
       },
+
       editRecord(id) {
         const rec = this.records.find(r => r.id === id); if (!rec) return;
         this.editingId = id;
         const select = document.getElementById('formHospitalSelect');
-        if (this.hospitals.some(h => h.name === rec.hospitalName)) { select.value = rec.hospitalName; this.handleHospitalSelectChange(rec.hospitalName); }
-        else { select.value = 'new'; this.handleHospitalSelectChange('new'); document.getElementById('formNewHospitalName').value = rec.hospitalName; document.getElementById('formNewHospitalType').value = rec.hospitalType || ''; }
-        
+        if (!this.hospitals.some(h => h.name === rec.hospitalName)) {
+          this.hospitals = this.mergeHospitals(this.hospitals, [{ name: rec.hospitalName, type: rec.hospitalType }]);
+          this.renderHospitalOptions();
+        }
+        select.value = rec.hospitalName; this.handleHospitalSelectChange(rec.hospitalName);
         document.getElementById('formDate').value = rec.date || '';
         document.getElementById('formToldDoctor').value = rec.toldDoctor || '';
         document.getElementById('formDoctorSaid').value = rec.doctorSaid || '';
-        if(document.getElementById('formExamDetails')) document.getElementById('formExamDetails').value = rec.examDetails || '';
+        document.getElementById('formExamDetails').value = rec.examDetails || '';
         document.getElementById('formMedicines').value = rec.medicines || '';
-        
         this.images = []; this.renderImageList();
-        document.getElementById('formTitle').innerText = "受診記録の編集"; document.getElementById('formCancelEditBtn').classList.remove('hidden');
+        document.getElementById('formTitle').innerText = '受診記録の編集';
+        document.getElementById('formCancelEditBtn').classList.remove('hidden');
         this.switchTab('record'); window.scrollTo(0, 0);
       },
-      deleteRecord(id) { this.records = this.records.filter(r => r.id !== id); localStorage.setItem('hospital_records', JSON.stringify(this.records)); this.renderHistory(); },
+
       showPopup(title, msg, isErr = false) {
-        document.getElementById('popupTitle').innerText = title; document.getElementById('popupMessage').innerText = msg;
+        document.getElementById('popupTitle').innerText = title;
+        document.getElementById('popupMessage').innerText = msg;
         const iconContainer = document.getElementById('popupIconContainer');
-        if (isErr) { iconContainer.innerHTML = '<i data-lucide="alert-circle" class="h-6 w-6 text-red-600"></i>'; iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4'; }
-        else { iconContainer.innerHTML = '<i data-lucide="check-circle" class="h-6 w-6 text-teal-600"></i>'; iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 mb-4'; }
+        if (isErr) {
+          iconContainer.innerHTML = '<i data-lucide="alert-circle" class="h-6 w-6 text-red-600"></i>';
+          iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4';
+        } else {
+          iconContainer.innerHTML = '<i data-lucide="check-circle" class="h-6 w-6 text-teal-600"></i>';
+          iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 mb-4';
+        }
         document.getElementById('customPopup').classList.remove('hidden'); lucide.createIcons();
       },
+
       closePopup() { document.getElementById('customPopup').classList.add('hidden'); },
-      saveGasUrl() {
-        const url = document.getElementById('settingGasUrl').value; this.gasUrl = url; localStorage.setItem('hospital_gas_url', url);
-        this.showPopup("設定完了", "GASのURLを保存しました。");
+
+      generateSyncToken() {
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        const token = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        document.getElementById('settingSyncToken').value = token;
+        this.showPopup('同期キーを生成しました', 'このキーをGASのスクリプトプロパティ「SYNC_TOKEN」にも同じ値で設定してください。その後「GASの設定を保存する」を押してください。');
       },
-      escapeHTML(str) { return str ? str.replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t])) : ''; },
+
+      async saveGasUrl() {
+        const url = document.getElementById('settingGasUrl').value.trim();
+        const token = document.getElementById('settingSyncToken').value.trim();
+        if (url && !/^https:\/\/script\.google\.com\//i.test(url)) return this.showPopup('設定できませんでした', 'GAS WebアプリのURLを入力してください。', true);
+        if (url && !token) return this.showPopup('設定できませんでした', '同期キー（SYNC_TOKEN）を入力してください。', true);
+        this.gasUrl = url;
+        this.syncToken = token;
+        localStorage.setItem('hospital_gas_url', url);
+        localStorage.setItem('hospital_sync_token', token);
+        this.updateSyncStatus();
+        if (!url) return this.showPopup('設定を解除しました', 'PC・スマホ同期はOFFになっています。');
+        await this.syncNow(false);
+        this.showPopup('設定完了', 'GAS URLと同期キーを保存しました。スマホ用の同期設定URLを使えば、同じ設定をスマホへ移せます。');
+      },
+
+      escapeHTML(str) { return str ? String(str).replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t])) : ''; },
+
       renderHistory() {
         const container = document.getElementById('historyContainer');
+        if (!container) return;
         const grouped = this.records.reduce((acc, rec) => {
+          if (!rec || !rec.hospitalName) return acc;
           if (!acc[rec.hospitalName]) acc[rec.hospitalName] = { name: rec.hospitalName, type: rec.hospitalType || '', records: [] };
           if (rec.hospitalType && !acc[rec.hospitalName].type) acc[rec.hospitalName].type = rec.hospitalType;
           acc[rec.hospitalName].records.push(rec); return acc;
         }, {});
         const groupValues = Object.values(grouped);
-        if (groupValues.length === 0) { container.innerHTML = `<div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500 font-bold">記録がありません。</div>`; return; }
-        
+        if (groupValues.length === 0) { container.innerHTML = '<div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-600 font-bold border border-gray-300">記録がありません。</div>'; return; }
+
         let html = '';
         groupValues.forEach(g => {
-          let typeHtml = g.type ? `<span class="text-xs text-gray-500 font-normal ml-1">(${this.escapeHTML(g.type)})</span>` : '';
-          let recordsHtml = g.records.map(rec => `
-              <div class="p-4 hover:bg-gray-50 transition">
-                <div class="flex justify-between items-start mb-2">
-                  <span class="text-sm font-bold text-gray-700 flex items-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${rec.date}</span>
-                  <div class="flex gap-3">
-                    <button onclick="app.editRecord('${rec.id}')" class="text-blue-500 hover:text-blue-700 transition" title="編集"><i data-lucide="edit" class="w-4 h-4"></i></button>
-                    <button onclick="if(confirm('削除しますか？')) app.deleteRecord('${rec.id}')" class="text-red-500 hover:text-red-700 transition" title="削除"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                  </div>
+          const typeHtml = g.type ? `<span class="text-xs text-gray-600 font-normal ml-1">(${this.escapeHTML(g.type)})</span>` : '';
+          const recordsHtml = g.records.map(rec => `
+            <div class="p-4 hover:bg-gray-50 transition">
+              <div class="flex justify-between items-start mb-2">
+                <span class="text-sm font-bold text-gray-800 flex items-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${this.escapeHTML(rec.date)}</span>
+                <div class="flex gap-3">
+                  <button onclick="app.editRecord('${rec.id}')" class="text-blue-600 hover:text-blue-800 transition" title="編集"><i data-lucide="edit" class="w-5 h-5"></i></button>
+                  <button onclick="app.deleteRecord('${rec.id}')" class="text-red-600 hover:text-red-800 transition" title="削除"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
                 </div>
-                <div class="space-y-3 mt-3">
-                  ${rec.toldDoctor ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 伝えたこと</p><p class="text-sm text-gray-900 font-medium bg-gray-100 p-2 rounded border border-gray-200">${this.escapeHTML(rec.toldDoctor).replace(/\n/g, '<br>')}</p></div>` : ''}
-                  ${rec.doctorSaid ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="stethoscope" class="w-3 h-3"></i> 先生の話</p><p class="text-sm text-gray-900 font-medium bg-teal-50 p-2 rounded border border-teal-200">${this.escapeHTML(rec.doctorSaid).replace(/\n/g, '<br>')}</p></div>` : ''}
-                  ${rec.examDetails ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="microscope" class="w-3 h-3"></i> 検査内容</p><p class="text-sm text-gray-900 font-medium bg-blue-50 p-2 rounded border border-blue-200">${this.escapeHTML(rec.examDetails).replace(/\n/g, '<br>')}</p></div>` : ''}
-                  ${rec.medicines ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="pill" class="w-3 h-3"></i> 処方薬</p><p class="text-sm text-gray-900 font-medium whitespace-pre-wrap border border-gray-300 p-2 rounded bg-white">${this.escapeHTML(rec.medicines)}</p></div>` : ''}
-                </div>
-              </div>`).join('');
-          html += `<div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-300"><div class="bg-gray-100 p-3 px-4 border-b border-gray-300 flex items-center gap-2"><i data-lucide="hospital" class="w-4.5 h-4.5 text-teal-700"></i><h3 class="font-bold text-gray-900">${this.escapeHTML(g.name)} ${typeHtml}</h3><span class="ml-auto bg-teal-100 text-teal-800 text-xs font-bold px-2 py-1 rounded-full border border-teal-200">${g.records.length}件</span></div><div class="divide-y divide-gray-200">${recordsHtml}</div></div>`;
+              </div>
+              <div class="space-y-3 mt-3">
+                ${rec.toldDoctor ? `<div><p class="text-xs font-bold text-gray-700">伝えたこと</p><p class="text-sm text-gray-950 font-medium bg-gray-100 p-2 rounded border border-gray-300">${this.escapeHTML(rec.toldDoctor).replace(/\n/g, '<br>')}</p></div>` : ''}
+                ${rec.doctorSaid ? `<div><p class="text-xs font-bold text-gray-700">先生の話</p><p class="text-sm text-gray-950 font-medium bg-teal-50 p-2 rounded border border-teal-300">${this.escapeHTML(rec.doctorSaid).replace(/\n/g, '<br>')}</p></div>` : ''}
+                ${rec.examDetails ? `<div><p class="text-xs font-bold text-gray-700">検査内容</p><p class="text-sm text-gray-950 font-medium bg-blue-50 p-2 rounded border border-blue-300">${this.escapeHTML(rec.examDetails).replace(/\n/g, '<br>')}</p></div>` : ''}
+                ${rec.medicines ? `<div><p class="text-xs font-bold text-gray-700">処方薬</p><p class="text-sm text-gray-950 font-medium whitespace-pre-wrap border border-gray-400 p-2 rounded bg-white">${this.escapeHTML(rec.medicines)}</p></div>` : ''}
+              </div>
+            </div>`).join('');
+          html += `<div class="bg-white rounded-xl shadow-sm overflow-hidden border-2 border-gray-300"><div class="bg-gray-100 p-3 px-4 border-b border-gray-300 flex items-center gap-2"><i data-lucide="hospital" class="w-5 h-5 text-teal-700"></i><h3 class="font-bold text-gray-950">${this.escapeHTML(g.name)} ${typeHtml}</h3><span class="ml-auto bg-teal-100 text-teal-900 text-xs font-bold px-2 py-1 rounded-full border border-teal-300">${g.records.length}件</span></div><div class="divide-y divide-gray-300">${recordsHtml}</div></div>`;
         });
         container.innerHTML = html; lucide.createIcons();
       }
     };
+
     document.addEventListener('DOMContentLoaded', () => app.init());
   </script>
 </body>
