@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>病院・お薬 記録帳 v2.2</title>
+  <title>病院・お薬 記録帳 v2.2 CSV取込版</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -18,7 +18,7 @@
           <div class="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
             <i data-lucide="hospital" class="w-6 h-6" stroke-width="2.5"></i>
           </div>
-          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.2</span> <span id="jsStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">JS確認中</span>
+          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.2 CSV</span> <span id="jsStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">JS確認中</span>
         </h1>
         <button type="button" onclick="app.syncNow(true)" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/40 px-2.5 py-1.5 rounded-lg text-xs font-bold">
           <i data-lucide="refresh-cw" class="w-4 h-4"></i><span id="headerSyncText">同期</span>
@@ -126,7 +126,7 @@
       <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-5 border border-gray-300">
         <div class="flex items-center justify-between border-b border-gray-300 pb-2">
           <h2 class="text-lg font-bold flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2>
-          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.2</span>
+          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.2 + CSV</span>
         </div>
 
         <div class="space-y-3">
@@ -187,6 +187,51 @@
             <i data-lucide="life-buoy" class="w-4 h-4"></i>この端末内の未同期データを救出
           </button>
           <p class="text-xs text-gray-700 font-medium">「救出」は、8月以降など旧版でPC内だけに残った記録をスプレッドシートへ移すときだけ使ってください。</p>
+        </div>
+
+        <div class="border-2 border-blue-300 bg-blue-50 rounded-xl p-4 space-y-4">
+          <div>
+            <p class="text-xs font-bold text-blue-900">過去データの復元</p>
+            <h3 class="text-base font-bold text-gray-950 mt-1 flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5"></i>CSVから過去データを読み込む</h3>
+            <p class="text-xs text-gray-700 font-medium mt-1">現在正常に動いているv2.2の同期通信をそのまま使い、CSVの各行を通常の保存処理でスプレッドシートへ追加します。同期処理そのものは変更していません。</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-sm font-bold text-gray-900">1. CSVファイルを選択</label>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv" onchange="app.handleCsvFileSelected(event)" class="block w-full text-sm font-medium text-gray-900 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-2 file:border-gray-400 file:bg-white file:text-gray-900 file:font-bold hover:file:bg-gray-50">
+            <p id="csvSelectedFile" class="text-xs text-gray-700 font-medium">まだCSVを選択していません。</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-sm font-bold text-gray-900">2. CSVに病院名の列がない場合の病院名</label>
+            <input type="text" id="csvFallbackHospital" list="csvHospitalSuggestions" class="w-full p-3 border-2 border-gray-400 text-gray-950 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none font-medium" placeholder="例：ふくい南アイクリニック">
+            <datalist id="csvHospitalSuggestions"></datalist>
+            <p class="text-xs text-gray-700 font-medium">病院ごとに書き出したCSVの場合は、ここにその病院名を入れてください。CSV内に「病院名」列がある場合は、その列を優先します。</p>
+          </div>
+
+          <button type="button" onclick="app.previewCsvImport()" class="w-full flex items-center justify-center gap-2 bg-white text-gray-950 border-2 border-blue-400 font-bold py-3 rounded-lg hover:bg-blue-100">
+            <i data-lucide="scan-search" class="w-4 h-4"></i>CSVの内容と重複を確認する
+          </button>
+
+          <div id="csvImportPreview" class="hidden border-2 border-gray-300 bg-white rounded-xl p-4 space-y-2">
+            <p class="text-sm font-bold text-gray-950">取り込み前の確認</p>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              <div class="border border-gray-300 rounded-lg p-2"><p class="text-xs font-bold text-gray-600">CSVデータ</p><p id="csvCountTotal" class="font-bold text-gray-950">0件</p></div>
+              <div class="border border-green-300 bg-green-50 rounded-lg p-2"><p class="text-xs font-bold text-green-800">新規登録</p><p id="csvCountNew" class="font-bold text-green-950">0件</p></div>
+              <div class="border border-amber-300 bg-amber-50 rounded-lg p-2"><p class="text-xs font-bold text-amber-800">重複・既存</p><p id="csvCountDuplicate" class="font-bold text-amber-950">0件</p></div>
+              <div class="border border-red-300 bg-red-50 rounded-lg p-2"><p class="text-xs font-bold text-red-800">エラー</p><p id="csvCountError" class="font-bold text-red-950">0件</p></div>
+            </div>
+            <p id="csvPreviewDetail" class="text-xs text-gray-700 font-medium whitespace-pre-wrap"></p>
+            <div id="csvErrorExamples" class="hidden text-xs text-red-900 bg-red-50 border border-red-300 rounded-lg p-3 whitespace-pre-wrap"></div>
+          </div>
+
+          <button type="button" id="csvImportBtn" onclick="app.importCsvRecords()" disabled class="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i data-lucide="upload" class="w-4 h-4"></i>確認した新規データを取り込む
+          </button>
+          <button type="button" onclick="app.resetCsvImport()" class="w-full flex items-center justify-center gap-2 bg-white text-gray-900 border-2 border-gray-400 font-bold py-2.5 rounded-lg hover:bg-gray-50">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>CSV取り込みをリセット
+          </button>
+          <p class="text-xs text-gray-700 font-medium">IDが空欄の行には、同じCSVを再度読み込んでも同じIDになるよう内容から安定したIDを自動発行します。既存IDまたは同内容の記録は取り込み前に除外します。</p>
         </div>
       </div>
 
@@ -373,6 +418,7 @@
       activeTargetId: null,
       syncing: false,
       connection: { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '' },
+      csvImportState: { file: null, text: '', rows: [], candidates: [], toImport: [], duplicates: [], errors: [], serverRecords: [], checked: false },
 
       async init() {
         try { await safeStore.init(); } catch (e) { console.warn('safeStore init failed', e); }
@@ -382,6 +428,7 @@
         this.importSetupFromHash();
         this.bindSettingsAutosave();
         this.renderHospitalOptions();
+        this.renderCsvHospitalSuggestions();
         this.renderHistory();
         this.updateSyncStatus();
         const dateEl = document.getElementById('formDate');
@@ -531,6 +578,309 @@
       createRecordId() {
         if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
         return `r_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      },
+
+      renderCsvHospitalSuggestions() {
+        const list = document.getElementById('csvHospitalSuggestions');
+        if (!list) return;
+        const names = Array.from(new Set((this.hospitals || []).map(h => String(h && h.name || '').trim()).filter(Boolean)));
+        list.innerHTML = names.map(name => `<option value="${this.escapeHTML(name)}"></option>`).join('');
+      },
+
+      handleCsvFileSelected(event) {
+        const file = event && event.target && event.target.files ? event.target.files[0] : null;
+        this.csvImportState = { file: file || null, text: '', rows: [], candidates: [], toImport: [], duplicates: [], errors: [], serverRecords: [], checked: false };
+        const label = document.getElementById('csvSelectedFile');
+        if (label) label.textContent = file ? `${file.name}（${Math.max(1, Math.round(file.size / 1024))}KB）` : 'まだCSVを選択していません。';
+        const fallback = document.getElementById('csvFallbackHospital');
+        if (file && fallback && !fallback.value.trim()) {
+          const guessed = this.guessHospitalFromCsvFileName(file.name);
+          if (guessed) fallback.value = guessed;
+        }
+        this.clearCsvPreview();
+      },
+
+      guessHospitalFromCsvFileName(name) {
+        let base = String(name || '').replace(/\.csv$/i, '').trim();
+        base = base.replace(/[-_ ]?(シート|sheet|export|エクスポート|csv|データ|data)$/i, '').trim();
+        const exact = (this.hospitals || []).find(h => base.includes(h.name) || h.name.includes(base));
+        if (exact) return exact.name;
+        return base.length >= 2 && base.length <= 50 ? base : '';
+      },
+
+      clearCsvPreview() {
+        const panel = document.getElementById('csvImportPreview');
+        if (panel) panel.classList.add('hidden');
+        const btn = document.getElementById('csvImportBtn');
+        if (btn) btn.disabled = true;
+        const err = document.getElementById('csvErrorExamples');
+        if (err) { err.classList.add('hidden'); err.textContent = ''; }
+      },
+
+      resetCsvImport() {
+        this.csvImportState = { file: null, text: '', rows: [], candidates: [], toImport: [], duplicates: [], errors: [], serverRecords: [], checked: false };
+        const fileInput = document.getElementById('csvFileInput');
+        if (fileInput) fileInput.value = '';
+        const fallback = document.getElementById('csvFallbackHospital');
+        if (fallback) fallback.value = '';
+        const label = document.getElementById('csvSelectedFile');
+        if (label) label.textContent = 'まだCSVを選択していません。';
+        this.clearCsvPreview();
+      },
+
+      readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(new Error('CSVファイルを読み取れませんでした。'));
+          reader.readAsText(file, 'UTF-8');
+        });
+      },
+
+      parseCsvText(text) {
+        const input = String(text || '').replace(/^\uFEFF/, '');
+        const rows = [];
+        let row = [], field = '', inQuotes = false;
+        for (let i = 0; i < input.length; i++) {
+          const ch = input[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (input[i + 1] === '"') { field += '"'; i++; }
+              else inQuotes = false;
+            } else field += ch;
+          } else {
+            if (ch === '"') inQuotes = true;
+            else if (ch === ',') { row.push(field); field = ''; }
+            else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+            else if (ch === '\r') {
+              if (input[i + 1] === '\n') i++;
+              row.push(field); rows.push(row); row = []; field = '';
+            } else field += ch;
+          }
+        }
+        if (inQuotes) throw new Error('CSV内の引用符（"）が閉じられていません。');
+        if (field !== '' || row.length) { row.push(field); rows.push(row); }
+        return rows.filter(r => r.some(v => String(v || '').trim() !== ''));
+      },
+
+      normalizeCsvHeader(value) {
+        return String(value || '').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s　_()（）【】［］\[\]・:：\-]/g, '');
+      },
+
+      csvHeaderMap(headerRow) {
+        const aliases = {
+          id: ['id','recordid','記録id','管理id','識別id'],
+          timestamp: ['記録日時','保存日時','登録日時','作成日時','timestamp','datetime','日時'],
+          date: ['受診日','診察日','受診年月日','日付','date'],
+          hospitalName: ['病院名','病院','医療機関名','医療機関','hospitalname','hospital'],
+          hospitalType: ['診療科','診療科種類','病院種類','科','hospitaltype','type'],
+          toldDoctor: ['伝えたこと','自分が伝えたこと','医師に伝えたこと','先生に伝えたこと','tolddoctor'],
+          doctorSaid: ['先生の話','先生が話したこと','医師の話','医師が話したこと','doctorsaid'],
+          examDetails: ['検査内容','検査','検査詳細','examdetails'],
+          medicines: ['処方薬','処方された薬','薬','薬の記録','medicines','medicine']
+        };
+        const normalized = headerRow.map(v => this.normalizeCsvHeader(v));
+        const map = {};
+        Object.keys(aliases).forEach(key => {
+          const candidates = aliases[key].map(v => this.normalizeCsvHeader(v));
+          const idx = normalized.findIndex(h => candidates.includes(h));
+          map[key] = idx;
+        });
+        return map;
+      },
+
+      normalizeCsvDate(value) {
+        let s = String(value || '').trim();
+        if (!s) return '';
+        s = s.replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '').replace(/[\.\/]/g, '-');
+        const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        return '';
+      },
+
+      normalizeCsvTimestamp(value, fallbackDate) {
+        const raw = String(value || '').trim();
+        if (raw) {
+          const d = new Date(raw.replace(/年/g,'-').replace(/月/g,'-').replace(/日/g,'').replace(/\//g,'-'));
+          if (!Number.isNaN(d.getTime())) return d.toISOString();
+        }
+        return fallbackDate ? `${fallbackDate}T00:00:00+09:00` : '';
+      },
+
+      recordFingerprint(record) {
+        const clean = v => String(v == null ? '' : v).trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        return [record.hospitalName, record.hospitalType, record.date, record.toldDoctor, record.doctorSaid, record.examDetails, record.medicines].map(clean).join('\u241F');
+      },
+
+      simpleHash(text) {
+        const s = String(text || '');
+        let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+        for (let i = 0; i < s.length; i++) {
+          const c = s.charCodeAt(i);
+          h1 ^= c; h1 = Math.imul(h1, 0x01000193) >>> 0;
+          h2 ^= c + i; h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+        }
+        return h1.toString(36).padStart(7,'0') + h2.toString(36).padStart(7,'0');
+      },
+
+      buildCsvCandidates(rows, fallbackHospital) {
+        if (!Array.isArray(rows) || rows.length < 2) throw new Error('CSVに見出し行とデータ行が必要です。');
+        const header = rows[0].map(v => String(v || '').trim());
+        const map = this.csvHeaderMap(header);
+        const recognized = Object.values(map).filter(i => i >= 0).length;
+        if (recognized < 2) throw new Error('CSVの見出しを認識できませんでした。1行目に「受診日」「診療科」「伝えたこと」などの見出しがあるCSVを使用してください。');
+
+        const candidates = [], errors = [];
+        const occurrence = new Map();
+        const get = (row, idx) => idx >= 0 ? String(row[idx] == null ? '' : row[idx]).trim() : '';
+
+        rows.slice(1).forEach((row, index) => {
+          const lineNo = index + 2;
+          if (!row.some(v => String(v || '').trim())) return;
+          const hospitalName = get(row, map.hospitalName) || String(fallbackHospital || '').trim();
+          const rawDate = get(row, map.date);
+          const rawTimestamp = get(row, map.timestamp);
+          let date = this.normalizeCsvDate(rawDate);
+          if (!date && rawTimestamp) date = this.normalizeCsvDate(rawTimestamp);
+          if (!hospitalName) { errors.push({ lineNo, message: '病院名がありません。病院名欄を入力してください。' }); return; }
+          if (!date) { errors.push({ lineNo, message: '受診日を確認できません。' }); return; }
+
+          const record = {
+            id: get(row, map.id),
+            timestamp: this.normalizeCsvTimestamp(rawTimestamp, date),
+            date,
+            hospitalName,
+            hospitalType: get(row, map.hospitalType),
+            toldDoctor: get(row, map.toldDoctor),
+            doctorSaid: get(row, map.doctorSaid),
+            examDetails: get(row, map.examDetails),
+            medicines: get(row, map.medicines)
+          };
+          const fp = this.recordFingerprint(record);
+          const count = (occurrence.get(fp) || 0) + 1;
+          occurrence.set(fp, count);
+          if (!record.id) record.id = `csv_${this.simpleHash(fp)}_${count}`;
+          candidates.push({ lineNo, record, fingerprint: fp });
+        });
+        return { header, map, candidates, errors };
+      },
+
+      async previewCsvImport() {
+        const file = this.csvImportState && this.csvImportState.file;
+        if (!file) return this.showPopup('CSVを確認できません', '先にCSVファイルを選択してください。', true);
+        const check = this.validateSettings();
+        if (!check.ok) return this.showPopup('CSVを確認できません', `${check.message}\n\n重複確認には現在のスプレッドシート接続が必要です。`, true);
+
+        this.showProgressPopup('CSVを確認中です', 'ファイルを解析し、スプレッドシートの既存データと重複を照合しています。');
+        try {
+          const text = await this.readFileAsText(file);
+          const rows = this.parseCsvText(text);
+          if (rows.length > 5001) throw new Error('CSVは一度に5000件まで取り込めます。ファイルを分けてください。');
+          const fallback = document.getElementById('csvFallbackHospital')?.value.trim() || '';
+          const built = this.buildCsvCandidates(rows, fallback);
+
+          const diag = await this.diagnoseSync(false);
+          if (!diag.ok) throw new Error(diag.message || 'GASへ接続できません。');
+          const server = await this.gasCall('getAllRecords', {}, 30000, true);
+          if (!server || server.status !== 'success' || !Array.isArray(server.records)) throw new Error(server && server.message ? server.message : '既存データを取得できませんでした。');
+
+          const serverIds = new Set(server.records.map(r => String(r && r.id || '').trim()).filter(Boolean));
+          const serverFps = new Set(server.records.map(r => this.recordFingerprint(r)));
+          const seenIds = new Set(), seenFps = new Set();
+          const toImport = [], duplicates = [];
+          for (const item of built.candidates) {
+            const id = String(item.record.id || '').trim();
+            let reason = '';
+            if (serverIds.has(id)) reason = '既存ID';
+            else if (serverFps.has(item.fingerprint)) reason = '同内容が既に保存済み';
+            else if (seenIds.has(id)) reason = 'CSV内のID重複';
+            else if (seenFps.has(item.fingerprint)) reason = 'CSV内の同内容重複';
+            if (reason) duplicates.push({ ...item, reason });
+            else {
+              toImport.push(item);
+              seenIds.add(id); seenFps.add(item.fingerprint);
+            }
+          }
+
+          this.csvImportState = { file, text, rows, candidates: built.candidates, toImport, duplicates, errors: built.errors, serverRecords: server.records, checked: true };
+          this.renderCsvImportPreview();
+          this.closePopup();
+        } catch (e) {
+          this.csvImportState.checked = false;
+          this.clearCsvPreview();
+          this.showPopup('CSVを確認できませんでした', String(e && e.message ? e.message : e), true);
+        }
+      },
+
+      renderCsvImportPreview() {
+        const state = this.csvImportState || {};
+        const total = (state.candidates || []).length + (state.errors || []).length;
+        const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+        setText('csvCountTotal', `${total}件`);
+        setText('csvCountNew', `${(state.toImport || []).length}件`);
+        setText('csvCountDuplicate', `${(state.duplicates || []).length}件`);
+        setText('csvCountError', `${(state.errors || []).length}件`);
+        const panel = document.getElementById('csvImportPreview');
+        if (panel) panel.classList.remove('hidden');
+        const detail = document.getElementById('csvPreviewDetail');
+        if (detail) {
+          const autoIds = (state.toImport || []).filter(x => String(x.record.id || '').startsWith('csv_')).length;
+          detail.textContent = `スプレッドシートとの重複確認済み。新規${(state.toImport || []).length}件だけを保存します。\nID空欄からの自動ID：${autoIds}件。重複・既存データは上書きせずスキップします。`;
+        }
+        const errBox = document.getElementById('csvErrorExamples');
+        const messages = [];
+        (state.errors || []).slice(0, 5).forEach(e => messages.push(`・${e.lineNo}行目：${e.message}`));
+        (state.duplicates || []).slice(0, Math.max(0, 5 - messages.length)).forEach(d => messages.push(`・${d.lineNo}行目：${d.reason}`));
+        if (errBox && messages.length) { errBox.textContent = messages.join('\n'); errBox.classList.remove('hidden'); }
+        else if (errBox) { errBox.textContent = ''; errBox.classList.add('hidden'); }
+        const btn = document.getElementById('csvImportBtn');
+        if (btn) btn.disabled = !(state.checked && (state.toImport || []).length > 0);
+        if (window.lucide) lucide.createIcons();
+      },
+
+      async importCsvRecords() {
+        const state = this.csvImportState || {};
+        if (!state.checked) return this.showPopup('取り込めません', '先に「CSVの内容と重複を確認する」を実行してください。', true);
+        const items = Array.isArray(state.toImport) ? state.toImport : [];
+        if (!items.length) return this.showPopup('取り込み対象はありません', '新規データはありません。重複データは保存しません。');
+        if (!confirm(`${items.length}件の新規データをスプレッドシートへ取り込みます。\n既存データは上書きしません。\n実行しますか？`)) return;
+
+        const btn = document.getElementById('csvImportBtn');
+        if (btn) btn.disabled = true;
+        this.showProgressPopup('CSVを取り込み中です', `0 / ${items.length}件を保存しました。`);
+        let saved = 0;
+        const failed = [];
+        try {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            try {
+              const result = await this.gasCall('saveRecord', { record: item.record }, 25000, true);
+              if (!result || result.status !== 'success' || result.saved !== true) throw new Error(result && result.message ? result.message : '保存確認に失敗しました。');
+              saved++;
+            } catch (e) {
+              failed.push({ lineNo: item.lineNo, message: String(e && e.message ? e.message : e) });
+            }
+            const msg = document.getElementById('popupMessage');
+            if (msg) msg.textContent = `${i + 1} / ${items.length}件を処理中\n保存成功：${saved}件 / 失敗：${failed.length}件`;
+          }
+
+          const sync = await this.syncNow(false, true);
+          this.csvImportState.checked = false;
+          if (failed.length === 0) {
+            this.showPopup('CSVを取り込みました', `${saved}件の過去データをスプレッドシートへ保存しました。\nPC・スマホ同期の対象になっています。${sync && sync.ok ? '\n最新履歴への同期も完了しました。' : '\n保存は完了しています。必要に応じて「今すぐ同期する」を押してください。'}`);
+            this.resetCsvImport();
+          } else {
+            this.showPopup('CSVを一部取り込みました', `保存成功：${saved}件\n保存失敗：${failed.length}件\n\n成功したデータはスプレッドシートに残っています。同じCSVをもう一度「内容と重複を確認」すると、成功済みは自動で除外され、未保存分だけ再実行できます。`, true);
+            this.csvImportState.errors = (this.csvImportState.errors || []).concat(failed.map(f => ({ lineNo: f.lineNo, message: `保存失敗：${f.message}` })));
+            this.renderCsvImportPreview();
+          }
+        } catch (e) {
+          this.showPopup('CSV取り込みでエラーが発生しました', `${String(e && e.message ? e.message : e)}\n\nすでに保存できたデータは消えません。再度重複確認を行えば、未保存分だけ続けられます。`, true);
+        } finally {
+          if (btn && this.csvImportState.checked && (this.csvImportState.toImport || []).length) btn.disabled = false;
+        }
       },
 
       validateSettings() {
@@ -1288,6 +1638,7 @@
         });
         const newOpt = document.createElement('option'); newOpt.value = 'new'; newOpt.innerText = '+ 新しく病院を追加する'; select.appendChild(newOpt);
         if (current && Array.from(select.options).some(o => o.value === current)) select.value = current; else select.value = '';
+        this.renderCsvHospitalSuggestions();
       },
 
       handleHospitalSelectChange(val) {
