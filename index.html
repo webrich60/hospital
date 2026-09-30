@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>病院・お薬 記録帳</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>病院・お薬 記録帳 v2.2 CSV取込版</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
@@ -15,15 +18,16 @@
           <div class="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
             <i data-lucide="hospital" class="w-6 h-6" stroke-width="2.5"></i>
           </div>
-          病院・お薬 記録帳
+          病院・お薬 記録帳 <span class="text-[10px] font-bold bg-white/20 border border-white/40 px-2 py-0.5 rounded-full">v2.2 CSV</span> <span id="jsStatusBadge" class="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-full">JS確認中</span>
         </h1>
-        <div id="syncStatus" class="hidden text-xs font-bold bg-white text-teal-700 px-2 py-1 rounded-full shadow-sm flex items-center gap-1">
-          <i data-lucide="cloud-off" class="w-3 h-3 text-red-500"></i>未同期
-        </div>
+        <button type="button" onclick="app.syncNow(true)" class="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 border border-white/40 px-2.5 py-1.5 rounded-lg text-xs font-bold">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i><span id="headerSyncText">同期</span>
+        </button>
       </div>
     </header>
 
     <main class="max-w-3xl mx-auto p-4">
+      <!-- 記録タブ -->
       <div id="tab-record" class="space-y-6">
         <div class="bg-white rounded-xl shadow-sm p-6 space-y-6">
           <div class="flex justify-between items-center border-b pb-2">
@@ -52,6 +56,7 @@
             </div>
           </div>
 
+          <!-- 伝えたこと -->
           <div>
             <div class="flex justify-between items-end mb-1">
               <label class="block text-sm font-bold text-gray-900 flex items-center gap-1"><i data-lucide="user" class="w-4 h-4"></i> 自分が伝えたこと</label>
@@ -60,6 +65,7 @@
             <textarea id="formToldDoctor" rows="3" class="w-full p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium"></textarea>
           </div>
 
+          <!-- 先生が話したこと -->
           <div>
             <div class="flex justify-between items-end mb-1">
               <label class="block text-sm font-bold text-gray-900 flex items-center gap-1"><i data-lucide="stethoscope" class="w-4 h-4"></i> 先生が話したこと</label>
@@ -68,6 +74,7 @@
             <textarea id="formDoctorSaid" rows="3" class="w-full p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium"></textarea>
           </div>
 
+          <!-- 検査内容 -->
           <div>
             <div class="flex justify-between items-end mb-1">
               <label class="block text-sm font-bold text-gray-900 flex items-center gap-1"><i data-lucide="microscope" class="w-4 h-4"></i> 検査内容（血液検査、レントゲンなど）</label>
@@ -76,6 +83,7 @@
             <textarea id="formExamDetails" rows="3" class="w-full p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium"></textarea>
           </div>
 
+          <!-- 処方薬 -->
           <div class="bg-teal-50 p-4 rounded-lg border-2 border-teal-200">
             <label class="block text-sm font-bold text-teal-900 mb-2 flex items-center gap-1"><i data-lucide="pill" class="w-4.5 h-4.5"></i> 処方された薬の記録</label>
             <div class="mb-4">
@@ -94,29 +102,142 @@
             <textarea id="formMedicines" rows="4" class="w-full p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium" placeholder="AIの読み取り結果がここに入ります。手動入力も可。"></textarea>
           </div>
 
-          <button onclick="app.handleSave()" class="w-full flex items-center justify-center gap-2 bg-teal-600 text-white font-bold py-3 rounded-lg hover:bg-teal-700 transition shadow-md">
+          <button type="button" id="formSaveBtn" onclick="app.handleSave()" class="w-full flex items-center justify-center gap-2 bg-teal-600 text-white font-bold py-3 rounded-lg hover:bg-teal-700 transition shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
             <i data-lucide="save" class="w-5 h-5"></i><span id="formSaveBtnText">記録を保存する</span>
           </button>
         </div>
       </div>
 
-      <div id="tab-history" class="hidden space-y-6">
+      <!-- 履歴タブ -->
+      <div id="tab-history" class="hidden space-y-4">
+        <div class="bg-white border-2 border-teal-200 rounded-xl p-3 shadow-sm flex items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold text-gray-600">PC・スマホ共通データ</p>
+            <p id="syncStatusText" class="text-sm font-bold text-gray-900">同期状態を確認中</p>
+          </div>
+          <button type="button" onclick="app.syncNow(true)" class="shrink-0 flex items-center gap-1.5 bg-teal-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-teal-700">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>今すぐ同期
+          </button>
+        </div>
         <div id="historyContainer" class="space-y-6"></div>
       </div>
 
-      <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-4 border border-gray-200">
-        <h2 class="text-lg font-bold border-b border-gray-300 pb-2 flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2>
+      <!-- 設定タブ -->
+      <div id="tab-settings" class="hidden bg-white rounded-xl shadow-sm p-6 space-y-5 border border-gray-300">
+        <div class="flex items-center justify-between border-b border-gray-300 pb-2">
+          <h2 class="text-lg font-bold flex items-center gap-2 text-gray-900"><i data-lucide="settings" class="w-5 h-5"></i> 設定</h2>
+          <span class="text-xs font-bold text-teal-800 bg-teal-50 border border-teal-300 px-2 py-1 rounded">FullSync v2.2 + CSV</span>
+        </div>
+
         <div class="space-y-3">
           <label class="block text-sm font-bold text-gray-900">GAS Webhook URL</label>
-          <p class="text-xs text-gray-700 font-medium mb-2">AI分析とデータ保存のために、デプロイしたGASのURLを入力してください。</p>
-          <input type="url" id="settingGasUrl" class="w-full p-2 border border-gray-400 text-gray-900 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium" placeholder="https://script.google.com/macros/s/...">
-          <button onclick="app.saveGasUrl()" class="w-full flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-2.5 rounded-lg hover:bg-gray-900 transition shadow-sm">
-            <i data-lucide="save" class="w-4 h-4"></i>GASの設定を保存する
+          <p class="text-xs text-gray-700 font-medium">デプロイしたGAS Webアプリの「/exec」で終わるURLを入力します。</p>
+          <input type="url" id="settingGasUrl" class="w-full p-3 border-2 border-gray-400 text-gray-950 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium" placeholder="https://script.google.com/macros/s/.../exec">
+
+          <label class="block text-sm font-bold text-gray-900 pt-2">同期キー（SYNC_TOKEN）</label>
+          <p class="text-xs text-gray-700 font-medium">PC・スマホで同じキーを使います。医療記録を保護するため必須です。</p>
+          <div class="flex gap-2">
+            <input type="password" id="settingSyncToken" class="flex-1 min-w-0 p-3 border-2 border-gray-400 text-gray-950 rounded-lg focus:ring-2 focus:ring-teal-600 outline-none font-medium" placeholder="SYNC_TOKEN">
+            <button type="button" id="toggleTokenBtn" onclick="app.toggleTokenVisibility()" class="shrink-0 px-3 py-2 bg-white border-2 border-gray-400 text-gray-900 rounded-lg text-xs font-bold hover:bg-gray-50">表示</button>
+            <button type="button" onclick="app.generateSyncToken()" class="shrink-0 px-3 py-2 bg-white border-2 border-gray-400 text-gray-900 rounded-lg text-xs font-bold hover:bg-gray-50">生成</button>
+          </div>
+
+          <button type="button" onclick="app.saveSettings()" class="w-full flex items-center justify-center gap-2 bg-gray-800 text-white font-bold py-3 rounded-lg hover:bg-gray-900 transition shadow-sm">
+            <i data-lucide="save" class="w-4 h-4"></i>設定を保存する
+          </button>
+          <button type="button" onclick="app.diagnoseSync(true)" class="w-full flex items-center justify-center gap-2 bg-white text-gray-950 border-2 border-gray-500 font-bold py-3 rounded-lg hover:bg-gray-50">
+            <i data-lucide="activity" class="w-4 h-4"></i>同期接続を診断する
           </button>
         </div>
+
+        <div class="border-2 border-gray-300 rounded-xl p-4 space-y-3 bg-gray-50">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-bold text-gray-900">GAS URL</span>
+            <span id="statusGasUrl" class="text-xs font-bold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">未確認</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-bold text-gray-900">同期キー</span>
+            <span id="statusSyncToken" class="text-xs font-bold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">未確認</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-bold text-gray-900">GAS接続</span>
+            <span id="statusGasConnection" class="text-xs font-bold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">未確認</span>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-bold text-gray-900">スプレッドシート</span>
+            <span id="statusSpreadsheet" class="text-xs font-bold px-2 py-1 rounded-full border bg-gray-100 text-gray-700 border-gray-300">未確認</span>
+          </div>
+          <div class="pt-2 border-t border-gray-300">
+            <p class="text-xs font-bold text-gray-600">最終同期</p>
+            <p id="statusLastSync" class="text-sm font-bold text-gray-900">まだありません</p>
+            <p id="connectionDetail" class="text-xs text-gray-700 font-medium mt-1 whitespace-pre-wrap"></p>
+          </div>
+        </div>
+
+        <div class="border-2 border-teal-300 bg-teal-50 rounded-xl p-4 space-y-3">
+          <p class="text-xs font-bold text-teal-900">PC・スマホ同期</p>
+          <p id="settingsSyncStatus" class="text-sm font-bold text-gray-950">同期状態を確認中</p>
+          <button type="button" onclick="app.syncNow(true)" class="w-full flex items-center justify-center gap-2 bg-teal-600 text-white font-bold py-3 rounded-lg hover:bg-teal-700">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>今すぐ同期する
+          </button>
+          <button type="button" onclick="app.copySyncSetupUrl()" class="w-full flex items-center justify-center gap-2 bg-white text-gray-950 border-2 border-gray-400 font-bold py-3 rounded-lg hover:bg-gray-50">
+            <i data-lucide="smartphone" class="w-4 h-4"></i>スマホ用の同期設定URLをコピー
+          </button>
+          <button type="button" onclick="app.rescueLocalRecords()" class="w-full flex items-center justify-center gap-2 bg-amber-50 text-amber-950 border-2 border-amber-400 font-bold py-3 rounded-lg hover:bg-amber-100">
+            <i data-lucide="life-buoy" class="w-4 h-4"></i>この端末内の未同期データを救出
+          </button>
+          <p class="text-xs text-gray-700 font-medium">「救出」は、8月以降など旧版でPC内だけに残った記録をスプレッドシートへ移すときだけ使ってください。</p>
+        </div>
+
+        <div class="border-2 border-blue-300 bg-blue-50 rounded-xl p-4 space-y-4">
+          <div>
+            <p class="text-xs font-bold text-blue-900">過去データの復元</p>
+            <h3 class="text-base font-bold text-gray-950 mt-1 flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5"></i>CSVから過去データを読み込む</h3>
+            <p class="text-xs text-gray-700 font-medium mt-1">現在正常に動いているv2.2の同期通信をそのまま使い、CSVの各行を通常の保存処理でスプレッドシートへ追加します。同期処理そのものは変更していません。</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-sm font-bold text-gray-900">1. CSVファイルを選択</label>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv" onchange="app.handleCsvFileSelected(event)" class="block w-full text-sm font-medium text-gray-900 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-2 file:border-gray-400 file:bg-white file:text-gray-900 file:font-bold hover:file:bg-gray-50">
+            <p id="csvSelectedFile" class="text-xs text-gray-700 font-medium">まだCSVを選択していません。</p>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-sm font-bold text-gray-900">2. CSVに病院名の列がない場合の病院名</label>
+            <input type="text" id="csvFallbackHospital" list="csvHospitalSuggestions" class="w-full p-3 border-2 border-gray-400 text-gray-950 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none font-medium" placeholder="例：ふくい南アイクリニック">
+            <datalist id="csvHospitalSuggestions"></datalist>
+            <p class="text-xs text-gray-700 font-medium">病院ごとに書き出したCSVの場合は、ここにその病院名を入れてください。CSV内に「病院名」列がある場合は、その列を優先します。</p>
+          </div>
+
+          <button type="button" onclick="app.previewCsvImport()" class="w-full flex items-center justify-center gap-2 bg-white text-gray-950 border-2 border-blue-400 font-bold py-3 rounded-lg hover:bg-blue-100">
+            <i data-lucide="scan-search" class="w-4 h-4"></i>CSVの内容と重複を確認する
+          </button>
+
+          <div id="csvImportPreview" class="hidden border-2 border-gray-300 bg-white rounded-xl p-4 space-y-2">
+            <p class="text-sm font-bold text-gray-950">取り込み前の確認</p>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              <div class="border border-gray-300 rounded-lg p-2"><p class="text-xs font-bold text-gray-600">CSVデータ</p><p id="csvCountTotal" class="font-bold text-gray-950">0件</p></div>
+              <div class="border border-green-300 bg-green-50 rounded-lg p-2"><p class="text-xs font-bold text-green-800">新規登録</p><p id="csvCountNew" class="font-bold text-green-950">0件</p></div>
+              <div class="border border-amber-300 bg-amber-50 rounded-lg p-2"><p class="text-xs font-bold text-amber-800">重複・既存</p><p id="csvCountDuplicate" class="font-bold text-amber-950">0件</p></div>
+              <div class="border border-red-300 bg-red-50 rounded-lg p-2"><p class="text-xs font-bold text-red-800">エラー</p><p id="csvCountError" class="font-bold text-red-950">0件</p></div>
+            </div>
+            <p id="csvPreviewDetail" class="text-xs text-gray-700 font-medium whitespace-pre-wrap"></p>
+            <div id="csvErrorExamples" class="hidden text-xs text-red-900 bg-red-50 border border-red-300 rounded-lg p-3 whitespace-pre-wrap"></div>
+          </div>
+
+          <button type="button" id="csvImportBtn" onclick="app.importCsvRecords()" disabled class="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i data-lucide="upload" class="w-4 h-4"></i>確認した新規データを取り込む
+          </button>
+          <button type="button" onclick="app.resetCsvImport()" class="w-full flex items-center justify-center gap-2 bg-white text-gray-900 border-2 border-gray-400 font-bold py-2.5 rounded-lg hover:bg-gray-50">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>CSV取り込みをリセット
+          </button>
+          <p class="text-xs text-gray-700 font-medium">IDが空欄の行には、同じCSVを再度読み込んでも同じIDになるよう内容から安定したIDを自動発行します。既存IDまたは同内容の記録は取り込み前に除外します。</p>
+        </div>
       </div>
+
     </main>
 
+    <!-- モーダル -->
     <div id="customPopup" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden px-4">
       <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl transform transition-all">
         <div class="text-center">
@@ -130,23 +251,8 @@
       </div>
     </div>
 
-    <div id="confirmPopup" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden px-4">
-      <div class="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl transform transition-all">
-        <div class="text-center">
-          <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
-            <i data-lucide="alert-triangle" class="h-6 w-6 text-red-600"></i>
-          </div>
-          <h3 class="text-lg font-bold text-gray-900 mb-2" id="confirmTitle">確認</h3>
-          <p class="text-sm text-gray-600 font-medium whitespace-pre-wrap" id="confirmMessage"></p>
-        </div>
-        <div class="mt-6 flex gap-3">
-          <button type="button" onclick="app.closeConfirm()" class="flex-1 rounded-lg border border-gray-300 px-4 py-2 bg-white text-base font-bold text-gray-700 hover:bg-gray-50 transition-colors">キャンセル</button>
-          <button type="button" id="confirmActionBtn" class="flex-1 rounded-lg border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-bold text-white hover:bg-red-700 transition-colors">OK</button>
-        </div>
-      </div>
-    </div>
-
-    <nav class="fixed bottom-0 w-full bg-white border-t border-gray-300 flex justify-around shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-20">
+    <!-- ナビ -->
+    <nav class="fixed bottom-0 w-full bg-white border-t border-gray-300 flex justify-around shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
       <button id="nav-record" onclick="app.switchTab('record')" class="flex-1 py-3 flex flex-col items-center gap-1 text-teal-600"><i data-lucide="camera" class="w-5 h-5"></i><span class="text-[10px] font-bold">記録する</span></button>
       <button id="nav-history" onclick="app.switchTab('history')" class="flex-1 py-3 flex flex-col items-center gap-1 text-gray-400"><i data-lucide="list" class="w-5 h-5"></i><span class="text-[10px] font-bold">履歴を見る</span></button>
       <button id="nav-settings" onclick="app.switchTab('settings')" class="flex-1 py-3 flex flex-col items-center gap-1 text-gray-400"><i data-lucide="settings" class="w-5 h-5"></i><span class="text-[10px] font-bold">設定</span></button>
@@ -154,6 +260,7 @@
   </div>
 
   <script>
+    const APP_VERSION = '2.2';
     const defaultHospitals = [
       { name: 'ふくい南アイクリニック', type: '眼科' },
       { name: 'バプテスト眼科クリニック', type: '眼科' },
@@ -162,59 +269,1132 @@
       { name: '富山高岡整志会病院', type: '整形外科' }
     ];
 
-    const app = {
-      records: [], hospitals: [], gasUrl: '', editingId: null, images: [], recognition: null, activeTargetId: null,
-      syncQueue: [], isSyncing: false, currentPage: {}, recordsPerPage: 5, confirmCallback: null,
+    const safeStore = {
+      cache: new Map(),
+      db: null,
+      mode: 'memory',
+      writableLocalStorage: false,
+      knownKeys: [
+        'hospital_records','hospital_gas_url','hospital_sync_token','hospital_list',
+        'hospital_pending_ops_v2','hospital_connection_checked_v2','hospital_last_diag',
+        'hospital_last_sync','hospital_last_sync_error'
+      ],
 
-      init() {
-        const savedRecords = localStorage.getItem('hospital_records');
-        if (savedRecords) {
-            this.records = JSON.parse(savedRecords);
-            this.records.forEach(r => { if(r.syncStatus === undefined) r.syncStatus = 'synced'; });
+      async init() {
+        // localStorage は同一ドメイン全体で容量を共有します。
+        // 容量超過・ブラウザ制限があってもアプリを止めず、IndexedDBへ退避します。
+        try {
+          const testKey = '__yuzu_storage_test__';
+          window.localStorage.setItem(testKey, '1');
+          window.localStorage.removeItem(testKey);
+          this.writableLocalStorage = true;
+          this.mode = 'localStorage';
+        } catch (e) {
+          this.writableLocalStorage = false;
+          console.warn('localStorage is not writable; using fallback storage', e);
         }
-        
-        const savedGasUrl = localStorage.getItem('hospital_gas_url');
-        if (savedGasUrl) { this.gasUrl = savedGasUrl; document.getElementById('settingGasUrl').value = this.gasUrl; }
-        
-        const savedQueue = localStorage.getItem('hospital_sync_queue');
-        if (savedQueue) this.syncQueue = JSON.parse(savedQueue);
-        
-        const savedHospitals = localStorage.getItem('hospital_list');
-        if (savedHospitals) {
-          let parsed = JSON.parse(savedHospitals);
-          let updated = false;
-          parsed = parsed.map(h => {
-            if (h.name === '松本耳鼻咽喉科クリニック') { updated = true; return { ...h, name: 'まつもと耳鼻咽喉科クリニック' }; }
-            return h;
+
+        try {
+          this.db = await new Promise(resolve => {
+            if (!window.indexedDB) return resolve(null);
+            let settled = false;
+            const done = v => { if (!settled) { settled = true; resolve(v); } };
+            try {
+              const req = window.indexedDB.open('YUZU_Hospital_Record_DB', 1);
+              req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+              };
+              req.onsuccess = () => done(req.result);
+              req.onerror = () => done(null);
+              req.onblocked = () => done(null);
+              setTimeout(() => done(null), 2500);
+            } catch (_) { done(null); }
           });
-          this.hospitals = parsed;
-          if (updated) localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
-        } else {
-          this.hospitals = defaultHospitals;
-          localStorage.setItem('hospital_list', JSON.stringify(defaultHospitals));
+          if (this.db && !this.writableLocalStorage) this.mode = 'IndexedDB';
+        } catch (_) { this.db = null; }
+
+        for (const key of this.knownKeys) {
+          let value = null;
+          // 書き込み不可でも「読み込み」はできる場合があるので、旧データ救出のため試します。
+          try { value = window.localStorage.getItem(key); } catch (_) {}
+          if (value == null && this.db) {
+            try { value = await this.idbGet(key); } catch (_) {}
+          }
+          if (value != null) this.cache.set(key, String(value));
         }
-        document.getElementById('formDate').value = new Date().toISOString().split('T')[0];
-        this.renderHospitalOptions(); lucide.createIcons(); this.initSpeechRecognition();
-        
-        this.updateSyncStatusUI();
-        if(this.syncQueue.length > 0) this.processSyncQueue();
-        
-        // Auto-sync every 30 seconds
-        setInterval(() => {
-            if(this.syncQueue.length > 0 && navigator.onLine) this.processSyncQueue();
-        }, 30000);
-        
-        window.addEventListener('online', () => {
-            if(this.syncQueue.length > 0) this.processSyncQueue();
+
+        // 読めた旧localStorageデータをIndexedDBへバックアップ。
+        if (this.db) {
+          for (const [key, value] of this.cache.entries()) {
+            try { await this.idbSet(key, value); } catch (_) {}
+          }
+        }
+        return this.mode;
+      },
+
+      get(key) {
+        if (this.cache.has(key)) return this.cache.get(key);
+        try {
+          const v = window.localStorage.getItem(key);
+          if (v != null) { this.cache.set(key, String(v)); return String(v); }
+        } catch (_) {}
+        return null;
+      },
+
+      set(key, value) {
+        const text = String(value == null ? '' : value);
+        this.cache.set(key, text);
+        let localOk = false;
+        try {
+          window.localStorage.setItem(key, text);
+          localOk = true;
+          this.writableLocalStorage = true;
+          this.mode = 'localStorage';
+        } catch (e) {
+          this.writableLocalStorage = false;
+          console.warn('localStorage write failed; fallback storage used', e);
+        }
+        if (this.db) {
+          this.idbSet(key, text).catch(() => {});
+          if (!localOk) this.mode = 'IndexedDB';
+        }
+        return localOk || !!this.db || this.cache.has(key);
+      },
+
+      remove(key) {
+        this.cache.delete(key);
+        try { window.localStorage.removeItem(key); } catch (_) {}
+        if (this.db) this.idbDelete(key).catch(() => {});
+      },
+
+      idbGet(key) {
+        return new Promise(resolve => {
+          if (!this.db) return resolve(null);
+          try {
+            const tx = this.db.transaction('kv', 'readonly');
+            const req = tx.objectStore('kv').get(key);
+            req.onsuccess = () => resolve(req.result == null ? null : String(req.result));
+            req.onerror = () => resolve(null);
+          } catch (_) { resolve(null); }
         });
+      },
+
+      idbSet(key, value) {
+        return new Promise(resolve => {
+          if (!this.db) return resolve(false);
+          try {
+            const tx = this.db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').put(String(value), key);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+            tx.onabort = () => resolve(false);
+          } catch (_) { resolve(false); }
+        });
+      },
+
+      idbDelete(key) {
+        return new Promise(resolve => {
+          if (!this.db) return resolve(false);
+          try {
+            const tx = this.db.transaction('kv', 'readwrite');
+            tx.objectStore('kv').delete(key);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+            tx.onabort = () => resolve(false);
+          } catch (_) { resolve(false); }
+        });
+      }
+    };
+
+    const app = {
+      records: [],
+      hospitals: [],
+      gasUrl: '',
+      syncToken: '',
+      editingId: null,
+      images: [],
+      recognition: null,
+      activeTargetId: null,
+      syncing: false,
+      connection: { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '' },
+      csvImportState: { file: null, text: '', rows: [], candidates: [], toImport: [], duplicates: [], errors: [], serverRecords: [], checked: false },
+
+      async init() {
+        try { await safeStore.init(); } catch (e) { console.warn('safeStore init failed', e); }
+        const jsBadge = document.getElementById('jsStatusBadge');
+        if (jsBadge) { jsBadge.textContent = 'JS OK'; jsBadge.className = 'text-[10px] font-bold bg-green-100 text-green-900 border border-green-300 px-2 py-0.5 rounded-full'; }
+        this.loadLocalCache();
+        this.importSetupFromHash();
+        this.bindSettingsAutosave();
+        this.renderHospitalOptions();
+        this.renderCsvHospitalSuggestions();
+        this.renderHistory();
+        this.updateSyncStatus();
+        const dateEl = document.getElementById('formDate');
+        if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+        if (window.lucide) lucide.createIcons();
+        this.initSpeechRecognition();
+
+        // 起動時は失敗ポップアップを出さない。画面はすぐ使える状態にする。
+        if (this.gasUrl && this.syncToken) {
+          setTimeout(async () => {
+            try {
+              const diag = await this.diagnoseSync(false);
+              if (diag && diag.ok) await this.syncNow(false, true);
+            } catch (e) {
+              console.warn('background connection check failed', e);
+            }
+          }, 250);
+        }
+      },
+
+      loadLocalCache() {
+        try { this.records = JSON.parse(safeStore.get('hospital_records') || '[]'); }
+        catch (_) { this.records = []; }
+
+        this.gasUrl = String(safeStore.get('hospital_gas_url') || '').trim();
+        this.syncToken = String(safeStore.get('hospital_sync_token') || '').trim();
+
+        const gasInput = document.getElementById('settingGasUrl');
+        const tokenInput = document.getElementById('settingSyncToken');
+        if (gasInput) gasInput.value = this.gasUrl;
+        if (tokenInput) tokenInput.value = this.syncToken;
+
+        let savedHospitals = [];
+        try { savedHospitals = JSON.parse(safeStore.get('hospital_list') || '[]'); } catch (_) {}
+        this.hospitals = this.mergeHospitals(defaultHospitals, savedHospitals, this.records.map(r => ({ name: r.hospitalName, type: r.hospitalType })));
+      },
+
+      bindSettingsAutosave() {
+        ['settingGasUrl', 'settingSyncToken'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('change', () => this.refreshSettingsFromInputs(true));
+          el.addEventListener('blur', () => this.refreshSettingsFromInputs(true));
+        });
+      },
+
+      normalizeGasUrl(value) {
+        let v = String(value || '').trim();
+        if (!v) return '';
+        try {
+          const u = new URL(v);
+          u.hash = '';
+          v = u.toString();
+        } catch (_) {}
+        return v.replace(/\/$/, '');
+      },
+
+      refreshSettingsFromInputs(persist = true) {
+        const gasInput = document.getElementById('settingGasUrl');
+        const tokenInput = document.getElementById('settingSyncToken');
+        const nextGas = this.normalizeGasUrl(gasInput ? gasInput.value : this.gasUrl);
+        const nextToken = String(tokenInput ? tokenInput.value : this.syncToken || '').trim();
+        const changed = nextGas !== this.gasUrl || nextToken !== this.syncToken;
+
+        this.gasUrl = nextGas;
+        this.syncToken = nextToken;
+        if (gasInput && gasInput.value !== nextGas) gasInput.value = nextGas;
+
+        if (persist) {
+          safeStore.set('hospital_gas_url', this.gasUrl);
+          safeStore.set('hospital_sync_token', this.syncToken);
+        }
+
+        if (changed) {
+          this.connection = { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '' };
+          safeStore.remove('hospital_connection_checked_v2');
+        }
+        this.updateSyncStatus();
+        return { gasUrl: this.gasUrl, syncToken: this.syncToken };
+      },
+
+      importSetupFromHash() {
+        try {
+          const hash = String(window.location.hash || '');
+          const prefix = '#yuzu-sync=';
+          if (!hash.startsWith(prefix)) return;
+          const encoded = hash.slice(prefix.length);
+          const padded = encoded.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - encoded.length % 4) % 4);
+          const json = decodeURIComponent(escape(atob(padded)));
+          const cfg = JSON.parse(json);
+          const gas = this.normalizeGasUrl(cfg.gas || '');
+          const token = String(cfg.token || '').trim();
+          if (gas) safeStore.set('hospital_gas_url', gas);
+          if (token) safeStore.set('hospital_sync_token', token);
+          this.gasUrl = gas || this.gasUrl;
+          this.syncToken = token || this.syncToken;
+          const gasInput = document.getElementById('settingGasUrl');
+          const tokenInput = document.getElementById('settingSyncToken');
+          if (gasInput) gasInput.value = this.gasUrl;
+          if (tokenInput) tokenInput.value = this.syncToken;
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+          setTimeout(() => this.showPopup('同期設定を取り込みました', 'PCと同じGAS URL・同期キーをこの端末に保存しました。\n「同期接続を診断する」で確認できます。'), 300);
+        } catch (e) {
+          console.warn('setup import failed', e);
+        }
+      },
+
+      mergeHospitals(...lists) {
+        const map = new Map();
+        lists.flat().forEach(h => {
+          if (!h || !h.name) return;
+          const name = (h.name === '松本耳鼻咽喉科クリニック' ? 'まつもと耳鼻咽喉科クリニック' : String(h.name)).trim();
+          if (!name) return;
+          const old = map.get(name);
+          map.set(name, { name, type: String((old && old.type) || h.type || '') });
+        });
+        return Array.from(map.values());
+      },
+
+      getPendingOps() {
+        try { return JSON.parse(safeStore.get('hospital_pending_ops_v2') || '[]'); }
+        catch (_) { return []; }
+      },
+
+      setPendingOps(ops) {
+        safeStore.set('hospital_pending_ops_v2', JSON.stringify(Array.isArray(ops) ? ops : []));
+        this.updateSyncStatus();
+      },
+
+      queuePendingSave(record) {
+        let ops = this.getPendingOps().filter(op => op && op.id !== record.id);
+        ops.push({ type: 'save', id: record.id, record, hospitalName: record.hospitalName, queuedAt: new Date().toISOString() });
+        this.setPendingOps(ops);
+      },
+
+      queuePendingDelete(id, hospitalName) {
+        let ops = this.getPendingOps().filter(op => op && op.id !== id);
+        ops.push({ type: 'delete', id, hospitalName: hospitalName || '', queuedAt: new Date().toISOString() });
+        this.setPendingOps(ops);
+      },
+
+      saveLocalCache() {
+        safeStore.set('hospital_records', JSON.stringify(this.records));
+        safeStore.set('hospital_list', JSON.stringify(this.hospitals));
+      },
+
+      createRecordId() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return `r_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      },
+
+      renderCsvHospitalSuggestions() {
+        const list = document.getElementById('csvHospitalSuggestions');
+        if (!list) return;
+        const names = Array.from(new Set((this.hospitals || []).map(h => String(h && h.name || '').trim()).filter(Boolean)));
+        list.innerHTML = names.map(name => `<option value="${this.escapeHTML(name)}"></option>`).join('');
+      },
+
+      handleCsvFileSelected(event) {
+        const file = event && event.target && event.target.files ? event.target.files[0] : null;
+        this.csvImportState = { file: file || null, text: '', rows: [], candidates: [], toImport: [], duplicates: [], errors: [], serverRecords: [], checked: false };
+        const label = document.getElementById('csvSelectedFile');
+        if (label) label.textContent = file ? `${file.name}（${Math.max(1, Math.round(file.size / 1024))}KB）` : 'まだCSVを選択していません。';
+        const fallback = document.getElementById('csvFallbackHospital');
+        if (file && fallback && !fallback.value.trim()) {
+          const guessed = this.guessHospitalFromCsvFileName(file.name);
+          if (guessed) fallback.value = guessed;
+        }
+        this.clearCsvPreview();
+      },
+
+      guessHospitalFromCsvFileName(name) {
+        let base = String(name || '').replace(/\.csv$/i, '').trim();
+        base = base.replace(/[-_ ]?(シート|sheet|export|エクスポート|csv|データ|data)$/i, '').trim();
+        const exact = (this.hospitals || []).find(h => base.includes(h.name) || h.name.includes(base));
+        if (exact) return exact.name;
+        return base.length >= 2 && base.length <= 50 ? base : '';
+      },
+
+      clearCsvPreview() {
+        const panel = document.getElementById('csvImportPreview');
+        if (panel) panel.classList.add('hidden');
+        const btn = document.getElementById('csvImportBtn');
+        if (btn) btn.disabled = true;
+        const err = document.getElementById('csvErrorExamples');
+        if (err) { err.classList.add('hidden'); err.textContent = ''; }
+      },
+
+      resetCsvImport() {
+        this.csvImportState = { file: null, text: '', rows: [], candidates: [], toImport: [], duplicates: [], errors: [], serverRecords: [], checked: false };
+        const fileInput = document.getElementById('csvFileInput');
+        if (fileInput) fileInput.value = '';
+        const fallback = document.getElementById('csvFallbackHospital');
+        if (fallback) fallback.value = '';
+        const label = document.getElementById('csvSelectedFile');
+        if (label) label.textContent = 'まだCSVを選択していません。';
+        this.clearCsvPreview();
+      },
+
+      readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(new Error('CSVファイルを読み取れませんでした。'));
+          reader.readAsText(file, 'UTF-8');
+        });
+      },
+
+      parseCsvText(text) {
+        const input = String(text || '').replace(/^\uFEFF/, '');
+        const rows = [];
+        let row = [], field = '', inQuotes = false;
+        for (let i = 0; i < input.length; i++) {
+          const ch = input[i];
+          if (inQuotes) {
+            if (ch === '"') {
+              if (input[i + 1] === '"') { field += '"'; i++; }
+              else inQuotes = false;
+            } else field += ch;
+          } else {
+            if (ch === '"') inQuotes = true;
+            else if (ch === ',') { row.push(field); field = ''; }
+            else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+            else if (ch === '\r') {
+              if (input[i + 1] === '\n') i++;
+              row.push(field); rows.push(row); row = []; field = '';
+            } else field += ch;
+          }
+        }
+        if (inQuotes) throw new Error('CSV内の引用符（"）が閉じられていません。');
+        if (field !== '' || row.length) { row.push(field); rows.push(row); }
+        return rows.filter(r => r.some(v => String(v || '').trim() !== ''));
+      },
+
+      normalizeCsvHeader(value) {
+        return String(value || '').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[\s　_()（）【】［］\[\]・:：\-]/g, '');
+      },
+
+      csvHeaderMap(headerRow) {
+        const aliases = {
+          id: ['id','recordid','記録id','管理id','識別id'],
+          timestamp: ['記録日時','保存日時','登録日時','作成日時','timestamp','datetime','日時'],
+          date: ['受診日','診察日','受診年月日','日付','date'],
+          hospitalName: ['病院名','病院','医療機関名','医療機関','hospitalname','hospital'],
+          hospitalType: ['診療科','診療科種類','病院種類','科','hospitaltype','type'],
+          toldDoctor: ['伝えたこと','自分が伝えたこと','医師に伝えたこと','先生に伝えたこと','tolddoctor'],
+          doctorSaid: ['先生の話','先生が話したこと','医師の話','医師が話したこと','doctorsaid'],
+          examDetails: ['検査内容','検査','検査詳細','examdetails'],
+          medicines: ['処方薬','処方された薬','薬','薬の記録','medicines','medicine']
+        };
+        const normalized = headerRow.map(v => this.normalizeCsvHeader(v));
+        const map = {};
+        Object.keys(aliases).forEach(key => {
+          const candidates = aliases[key].map(v => this.normalizeCsvHeader(v));
+          const idx = normalized.findIndex(h => candidates.includes(h));
+          map[key] = idx;
+        });
+        return map;
+      },
+
+      normalizeCsvDate(value) {
+        let s = String(value || '').trim();
+        if (!s) return '';
+        s = s.replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, '').replace(/[\.\/]/g, '-');
+        const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        return '';
+      },
+
+      normalizeCsvTimestamp(value, fallbackDate) {
+        const raw = String(value || '').trim();
+        if (raw) {
+          const d = new Date(raw.replace(/年/g,'-').replace(/月/g,'-').replace(/日/g,'').replace(/\//g,'-'));
+          if (!Number.isNaN(d.getTime())) return d.toISOString();
+        }
+        return fallbackDate ? `${fallbackDate}T00:00:00+09:00` : '';
+      },
+
+      recordFingerprint(record) {
+        const clean = v => String(v == null ? '' : v).trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        return [record.hospitalName, record.hospitalType, record.date, record.toldDoctor, record.doctorSaid, record.examDetails, record.medicines].map(clean).join('\u241F');
+      },
+
+      simpleHash(text) {
+        const s = String(text || '');
+        let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+        for (let i = 0; i < s.length; i++) {
+          const c = s.charCodeAt(i);
+          h1 ^= c; h1 = Math.imul(h1, 0x01000193) >>> 0;
+          h2 ^= c + i; h2 = Math.imul(h2, 0x85ebca6b) >>> 0;
+        }
+        return h1.toString(36).padStart(7,'0') + h2.toString(36).padStart(7,'0');
+      },
+
+      buildCsvCandidates(rows, fallbackHospital) {
+        if (!Array.isArray(rows) || rows.length < 2) throw new Error('CSVに見出し行とデータ行が必要です。');
+        const header = rows[0].map(v => String(v || '').trim());
+        const map = this.csvHeaderMap(header);
+        const recognized = Object.values(map).filter(i => i >= 0).length;
+        if (recognized < 2) throw new Error('CSVの見出しを認識できませんでした。1行目に「受診日」「診療科」「伝えたこと」などの見出しがあるCSVを使用してください。');
+
+        const candidates = [], errors = [];
+        const occurrence = new Map();
+        const get = (row, idx) => idx >= 0 ? String(row[idx] == null ? '' : row[idx]).trim() : '';
+
+        rows.slice(1).forEach((row, index) => {
+          const lineNo = index + 2;
+          if (!row.some(v => String(v || '').trim())) return;
+          const hospitalName = get(row, map.hospitalName) || String(fallbackHospital || '').trim();
+          const rawDate = get(row, map.date);
+          const rawTimestamp = get(row, map.timestamp);
+          let date = this.normalizeCsvDate(rawDate);
+          if (!date && rawTimestamp) date = this.normalizeCsvDate(rawTimestamp);
+          if (!hospitalName) { errors.push({ lineNo, message: '病院名がありません。病院名欄を入力してください。' }); return; }
+          if (!date) { errors.push({ lineNo, message: '受診日を確認できません。' }); return; }
+
+          const record = {
+            id: get(row, map.id),
+            timestamp: this.normalizeCsvTimestamp(rawTimestamp, date),
+            date,
+            hospitalName,
+            hospitalType: get(row, map.hospitalType),
+            toldDoctor: get(row, map.toldDoctor),
+            doctorSaid: get(row, map.doctorSaid),
+            examDetails: get(row, map.examDetails),
+            medicines: get(row, map.medicines)
+          };
+          const fp = this.recordFingerprint(record);
+          const count = (occurrence.get(fp) || 0) + 1;
+          occurrence.set(fp, count);
+          if (!record.id) record.id = `csv_${this.simpleHash(fp)}_${count}`;
+          candidates.push({ lineNo, record, fingerprint: fp });
+        });
+        return { header, map, candidates, errors };
+      },
+
+      async previewCsvImport() {
+        const file = this.csvImportState && this.csvImportState.file;
+        if (!file) return this.showPopup('CSVを確認できません', '先にCSVファイルを選択してください。', true);
+        const check = this.validateSettings();
+        if (!check.ok) return this.showPopup('CSVを確認できません', `${check.message}\n\n重複確認には現在のスプレッドシート接続が必要です。`, true);
+
+        this.showProgressPopup('CSVを確認中です', 'ファイルを解析し、スプレッドシートの既存データと重複を照合しています。');
+        try {
+          const text = await this.readFileAsText(file);
+          const rows = this.parseCsvText(text);
+          if (rows.length > 5001) throw new Error('CSVは一度に5000件まで取り込めます。ファイルを分けてください。');
+          const fallback = document.getElementById('csvFallbackHospital')?.value.trim() || '';
+          const built = this.buildCsvCandidates(rows, fallback);
+
+          const diag = await this.diagnoseSync(false);
+          if (!diag.ok) throw new Error(diag.message || 'GASへ接続できません。');
+          const server = await this.gasCall('getAllRecords', {}, 30000, true);
+          if (!server || server.status !== 'success' || !Array.isArray(server.records)) throw new Error(server && server.message ? server.message : '既存データを取得できませんでした。');
+
+          const serverIds = new Set(server.records.map(r => String(r && r.id || '').trim()).filter(Boolean));
+          const serverFps = new Set(server.records.map(r => this.recordFingerprint(r)));
+          const seenIds = new Set(), seenFps = new Set();
+          const toImport = [], duplicates = [];
+          for (const item of built.candidates) {
+            const id = String(item.record.id || '').trim();
+            let reason = '';
+            if (serverIds.has(id)) reason = '既存ID';
+            else if (serverFps.has(item.fingerprint)) reason = '同内容が既に保存済み';
+            else if (seenIds.has(id)) reason = 'CSV内のID重複';
+            else if (seenFps.has(item.fingerprint)) reason = 'CSV内の同内容重複';
+            if (reason) duplicates.push({ ...item, reason });
+            else {
+              toImport.push(item);
+              seenIds.add(id); seenFps.add(item.fingerprint);
+            }
+          }
+
+          this.csvImportState = { file, text, rows, candidates: built.candidates, toImport, duplicates, errors: built.errors, serverRecords: server.records, checked: true };
+          this.renderCsvImportPreview();
+          this.closePopup();
+        } catch (e) {
+          this.csvImportState.checked = false;
+          this.clearCsvPreview();
+          this.showPopup('CSVを確認できませんでした', String(e && e.message ? e.message : e), true);
+        }
+      },
+
+      renderCsvImportPreview() {
+        const state = this.csvImportState || {};
+        const total = (state.candidates || []).length + (state.errors || []).length;
+        const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+        setText('csvCountTotal', `${total}件`);
+        setText('csvCountNew', `${(state.toImport || []).length}件`);
+        setText('csvCountDuplicate', `${(state.duplicates || []).length}件`);
+        setText('csvCountError', `${(state.errors || []).length}件`);
+        const panel = document.getElementById('csvImportPreview');
+        if (panel) panel.classList.remove('hidden');
+        const detail = document.getElementById('csvPreviewDetail');
+        if (detail) {
+          const autoIds = (state.toImport || []).filter(x => String(x.record.id || '').startsWith('csv_')).length;
+          detail.textContent = `スプレッドシートとの重複確認済み。新規${(state.toImport || []).length}件だけを保存します。\nID空欄からの自動ID：${autoIds}件。重複・既存データは上書きせずスキップします。`;
+        }
+        const errBox = document.getElementById('csvErrorExamples');
+        const messages = [];
+        (state.errors || []).slice(0, 5).forEach(e => messages.push(`・${e.lineNo}行目：${e.message}`));
+        (state.duplicates || []).slice(0, Math.max(0, 5 - messages.length)).forEach(d => messages.push(`・${d.lineNo}行目：${d.reason}`));
+        if (errBox && messages.length) { errBox.textContent = messages.join('\n'); errBox.classList.remove('hidden'); }
+        else if (errBox) { errBox.textContent = ''; errBox.classList.add('hidden'); }
+        const btn = document.getElementById('csvImportBtn');
+        if (btn) btn.disabled = !(state.checked && (state.toImport || []).length > 0);
+        if (window.lucide) lucide.createIcons();
+      },
+
+      async importCsvRecords() {
+        const state = this.csvImportState || {};
+        if (!state.checked) return this.showPopup('取り込めません', '先に「CSVの内容と重複を確認する」を実行してください。', true);
+        const items = Array.isArray(state.toImport) ? state.toImport : [];
+        if (!items.length) return this.showPopup('取り込み対象はありません', '新規データはありません。重複データは保存しません。');
+        if (!confirm(`${items.length}件の新規データをスプレッドシートへ取り込みます。\n既存データは上書きしません。\n実行しますか？`)) return;
+
+        const btn = document.getElementById('csvImportBtn');
+        if (btn) btn.disabled = true;
+        this.showProgressPopup('CSVを取り込み中です', `0 / ${items.length}件を保存しました。`);
+        let saved = 0;
+        const failed = [];
+        try {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            try {
+              const result = await this.gasCall('saveRecord', { record: item.record }, 25000, true);
+              if (!result || result.status !== 'success' || result.saved !== true) throw new Error(result && result.message ? result.message : '保存確認に失敗しました。');
+              saved++;
+            } catch (e) {
+              failed.push({ lineNo: item.lineNo, message: String(e && e.message ? e.message : e) });
+            }
+            const msg = document.getElementById('popupMessage');
+            if (msg) msg.textContent = `${i + 1} / ${items.length}件を処理中\n保存成功：${saved}件 / 失敗：${failed.length}件`;
+          }
+
+          const sync = await this.syncNow(false, true);
+          this.csvImportState.checked = false;
+          if (failed.length === 0) {
+            this.showPopup('CSVを取り込みました', `${saved}件の過去データをスプレッドシートへ保存しました。\nPC・スマホ同期の対象になっています。${sync && sync.ok ? '\n最新履歴への同期も完了しました。' : '\n保存は完了しています。必要に応じて「今すぐ同期する」を押してください。'}`);
+            this.resetCsvImport();
+          } else {
+            this.showPopup('CSVを一部取り込みました', `保存成功：${saved}件\n保存失敗：${failed.length}件\n\n成功したデータはスプレッドシートに残っています。同じCSVをもう一度「内容と重複を確認」すると、成功済みは自動で除外され、未保存分だけ再実行できます。`, true);
+            this.csvImportState.errors = (this.csvImportState.errors || []).concat(failed.map(f => ({ lineNo: f.lineNo, message: `保存失敗：${f.message}` })));
+            this.renderCsvImportPreview();
+          }
+        } catch (e) {
+          this.showPopup('CSV取り込みでエラーが発生しました', `${String(e && e.message ? e.message : e)}\n\nすでに保存できたデータは消えません。再度重複確認を行えば、未保存分だけ続けられます。`, true);
+        } finally {
+          if (btn && this.csvImportState.checked && (this.csvImportState.toImport || []).length) btn.disabled = false;
+        }
+      },
+
+      validateSettings() {
+        this.refreshSettingsFromInputs(true);
+        if (!this.gasUrl) return { ok: false, message: '設定タブでGAS Webhook URLを入力してください。' };
+        if (!/^https:\/\/script\.google\.com\/macros\/s\//i.test(this.gasUrl) || !/\/exec(?:\?|$)/i.test(this.gasUrl)) {
+          return { ok: false, message: 'GAS WebアプリのURLは「https://script.google.com/macros/s/.../exec」のURLを使用してください。' };
+        }
+        if (!this.syncToken) return { ok: false, message: '設定タブで同期キー（SYNC_TOKEN）を入力してください。' };
+        return { ok: true };
+      },
+
+      makeRequestId() {
+        if (window.crypto && crypto.randomUUID) return `yuzu_${crypto.randomUUID()}`;
+        return `yuzu_${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
+      },
+
+      async jsonpHealth(timeoutMs = 12000) {
+        this.refreshSettingsFromInputs(true);
+        if (!this.gasUrl) throw new Error('GAS URLが設定されていません。');
+
+        return new Promise((resolve, reject) => {
+          const cbName = `__yuzu_health_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_$]/g, '_');
+          const script = document.createElement('script');
+          let settled = false;
+
+          const cleanup = () => {
+            try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+            if (script.parentNode) script.parentNode.removeChild(script);
+          };
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error('GASの稼働確認(GET)に応答がありません。'));
+          }, timeoutMs);
+
+          window[cbName] = data => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(data);
+          };
+          script.onerror = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            reject(new Error('GASの稼働確認(GET)を読み込めませんでした。'));
+          };
+
+          const sep = this.gasUrl.includes('?') ? '&' : '?';
+          script.src = `${this.gasUrl}${sep}action=health&callback=${encodeURIComponent(cbName)}&_=${Date.now()}`;
+          document.head.appendChild(script);
+        });
+      },
+
+      async jsonpGetAllRecords(readTicket, timeoutMs = 25000) {
+        this.refreshSettingsFromInputs(true);
+        if (!this.gasUrl) throw new Error('GAS URLが設定されていません。');
+        if (!readTicket) throw new Error('履歴取得用チケットがありません。');
+
+        return new Promise((resolve, reject) => {
+          const cbName = `__yuzu_records_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_$]/g, '_');
+          const script = document.createElement('script');
+          let settled = false;
+          const cleanup = () => {
+            try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+            if (script.parentNode) script.parentNode.removeChild(script);
+          };
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error('スプレッドシート履歴の取得に時間がかかりすぎています。'));
+          }, timeoutMs);
+          window[cbName] = data => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(data);
+          };
+          script.onerror = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            cleanup();
+            reject(new Error('スプレッドシート履歴を読み込めませんでした。'));
+          };
+          const sep = this.gasUrl.includes('?') ? '&' : '?';
+          script.src = `${this.gasUrl}${sep}action=getAllRecords&ticket=${encodeURIComponent(readTicket)}&callback=${encodeURIComponent(cbName)}&_=${Date.now()}`;
+          document.head.appendChild(script);
+        });
+      },
+
+      async pollGasResult(requestId, timeoutMs = 20000) {
+        const started = Date.now();
+        let sawProcessing = false;
+        let sawEndpoint = false;
+
+        while (Date.now() - started < timeoutMs) {
+          const result = await new Promise((resolve, reject) => {
+            const cbName = `__yuzu_poll_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_$]/g, '_');
+            const script = document.createElement('script');
+            let settled = false;
+            const timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+              if (script.parentNode) script.parentNode.removeChild(script);
+              reject(new Error('同期結果の確認に応答がありません。'));
+            }, 6000);
+
+            const cleanup = () => {
+              clearTimeout(timer);
+              try { delete window[cbName]; } catch (_) { window[cbName] = undefined; }
+              if (script.parentNode) script.parentNode.removeChild(script);
+            };
+            window[cbName] = data => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              resolve(data);
+            };
+            script.onerror = () => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              reject(new Error('同期結果の確認を読み込めませんでした。'));
+            };
+
+            const sep = this.gasUrl.includes('?') ? '&' : '?';
+            script.src = `${this.gasUrl}${sep}action=poll&rid=${encodeURIComponent(requestId)}&callback=${encodeURIComponent(cbName)}&_=${Date.now()}`;
+            document.head.appendChild(script);
+          });
+
+          sawEndpoint = true;
+          if (result && result.status === 'processing') {
+            sawProcessing = true;
+          } else if (result && result.status === 'pending') {
+            // POSTがまだGASへ届いていない、または処理開始前。
+          } else if (result && result.status) {
+            return result;
+          }
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        if (!sawEndpoint) throw new Error('GASの結果確認(GET)に接続できませんでした。');
+        if (!sawProcessing) throw new Error('GASのGET接続はOKですが、POST送信がGASに到達していません。');
+        throw new Error('GASにはPOST送信できましたが、処理が時間内に完了しませんでした。');
+      },
+
+      async postGasRequest(action, payload = {}, timeoutMs = 20000, useToken = true) {
+        this.refreshSettingsFromInputs(true);
+        if (!this.gasUrl) throw new Error('GAS URLが設定されていません。');
+
+        const requestId = this.makeRequestId();
+        const iframeName = `yuzu_post_${Date.now()}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_]/g, '');
+        const iframe = document.createElement('iframe');
+        iframe.name = iframeName;
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.tabIndex = -1;
+        iframe.style.position = 'fixed';
+        iframe.style.width = '1px';
+        iframe.style.height = '1px';
+        iframe.style.opacity = '0';
+        iframe.style.pointerEvents = 'none';
+        iframe.style.left = '-9999px';
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = this.gasUrl;
+        form.target = iframeName;
+        form.acceptCharset = 'UTF-8';
+        form.style.display = 'none';
+
+        const addInput = (name, value) => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = value == null ? '' : String(value);
+          form.appendChild(input);
+        };
+        addInput('transport', 'post-poll');
+        addInput('rid', requestId);
+        addInput('action', action);
+        addInput('token', useToken ? this.syncToken : '');
+        const payloadField = document.createElement('textarea');
+        payloadField.name = 'payload';
+        payloadField.value = JSON.stringify(payload || {});
+        payloadField.style.display = 'none';
+        form.appendChild(payloadField);
+
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        try {
+          form.submit();
+        } catch (e) {
+          if (form.parentNode) form.parentNode.removeChild(form);
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          throw new Error('GASへのPOST送信を開始できませんでした。');
+        }
+
+        try {
+          return await this.pollGasResult(requestId, timeoutMs);
+        } finally {
+          if (form.parentNode) form.parentNode.removeChild(form);
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }
+      },
+
+      async gasCall(action, payload = {}, timeoutMs = 20000, useToken = true) {
+        if (action === 'health') return this.jsonpHealth(timeoutMs);
+        if (action === 'getAllRecords') {
+          const ticketResult = await this.postGasRequest('getReadTicket', {}, Math.min(timeoutMs, 15000), true);
+          if (!ticketResult || ticketResult.status !== 'success' || !ticketResult.readTicket) {
+            throw new Error(ticketResult && ticketResult.message ? ticketResult.message : '履歴取得用チケットを発行できませんでした。');
+          }
+          return this.jsonpGetAllRecords(ticketResult.readTicket, timeoutMs);
+        }
+        return this.postGasRequest(action, payload, timeoutMs, useToken);
+      },
+
+      friendlySyncError(errorOrMessage) {
+        const raw = String(errorOrMessage && errorOrMessage.message ? errorOrMessage.message : errorOrMessage || '不明なエラーです。').trim();
+        if (/同期キーが一致しません/.test(raw)) return '同期キーが一致していません。\n画面のSYNC_TOKENとGASのスクリプトプロパティ「SYNC_TOKEN」を同じ値にしてください。';
+        if (/SYNC_TOKENが設定されていません/.test(raw)) return 'GAS側にSYNC_TOKENが設定されていません。\nApps Scriptで setupYuzu を1回実行するか、スクリプトプロパティにSYNC_TOKENを設定してください。';
+        if (/SPREADSHEET_ID/.test(raw)) return raw + '\nGASのスクリプトプロパティ「SPREADSHEET_ID」を確認してください。';
+        if (/保存先スプレッドシートを取得できません/.test(raw)) return raw + '\nApps Scriptで setupYuzu を1回実行すると設定できます。';
+        if (/POST送信がGASに到達していません/.test(raw)) return 'GASの稼働確認(GET)は通っていますが、POST送信が届いていません。\nCode.gs v2.2を新しいバージョンで再デプロイし、/exec URLを使ってください。';
+        if (/処理が時間内に完了/.test(raw)) return 'GASには送信できていますが、処理完了までに時間がかかっています。\nしばらく待って再実行してください。';
+        if (/応答がありません|タイムアウト|読み込めません/.test(raw)) return raw + '\nGASの/exec URLとネット接続を確認してください。';
+        if (/無効なアクション/.test(raw)) return 'GASが旧版です。Code.gs v2.2を上書きして、新しいバージョンとして再デプロイしてください。';
+        return raw;
+      },
+
+      setConnectionBadge(id, state, text) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const label = text || (state === 'ok' ? 'OK' : state === 'ng' ? 'NG' : '未確認');
+        el.textContent = label;
+        el.className = 'text-xs font-bold px-2 py-1 rounded-full border ' +
+          (state === 'ok' ? 'bg-green-50 text-green-800 border-green-300' :
+           state === 'ng' ? 'bg-red-50 text-red-700 border-red-300' :
+           'bg-gray-100 text-gray-700 border-gray-300');
+      },
+
+      updateConnectionPanel() {
+        this.setConnectionBadge('statusGasUrl', this.gasUrl ? 'ok' : 'ng', this.gasUrl ? '設定済み' : '未設定');
+        this.setConnectionBadge('statusSyncToken', this.syncToken ? 'ok' : 'ng', this.syncToken ? '設定済み' : '未設定');
+        this.setConnectionBadge('statusGasConnection', this.connection.gas, this.connection.gas === 'ok' ? '接続OK' : this.connection.gas === 'ng' ? '接続NG' : '未確認');
+        this.setConnectionBadge('statusSpreadsheet', this.connection.spreadsheet, this.connection.spreadsheet === 'ok' ? '接続OK' : this.connection.spreadsheet === 'ng' ? '接続NG' : '未確認');
+        const lastEl = document.getElementById('statusLastSync');
+        const last = safeStore.get('hospital_last_sync');
+        if (lastEl) lastEl.textContent = last ? new Date(last).toLocaleString('ja-JP') : 'まだありません';
+        const msg = document.getElementById('connectionDetail');
+        if (msg) {
+          const storageText = safeStore.mode === 'localStorage' ? '端末保存: localStorage' : safeStore.mode === 'IndexedDB' ? '端末保存: IndexedDB（容量対策）' : '端末保存: 一時メモリ';
+          msg.textContent = [this.connection.message || '', storageText].filter(Boolean).join('\n');
+        }
+      },
+
+      async saveSettings() {
+        this.refreshSettingsFromInputs(true);
+        const check = this.validateSettings();
+        if (!check.ok) return this.showPopup('設定を保存できませんでした', check.message, true);
+        this.connection = { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: '設定を保存しました。接続診断はまだ行っていません。' };
+        safeStore.remove('hospital_connection_checked_v2');
+        this.updateSyncStatus();
+        this.showPopup('設定を保存しました', 'GAS URLと同期キーをこの端末に保存しました。\n続けて「同期接続を診断する」を押してください。');
+      },
+
+      async diagnoseSync(showPopup = true) {
+        this.refreshSettingsFromInputs(true);
+        const check = this.validateSettings();
+        if (!check.ok) {
+          this.connection = { gas: 'ng', token: this.syncToken ? 'unknown' : 'ng', spreadsheet: 'unknown', message: check.message };
+          this.updateSyncStatus();
+          if (showPopup) this.showPopup('診断できません', check.message, true);
+          return { ok: false, message: check.message };
+        }
+
+        this.connection = { gas: 'unknown', token: 'unknown', spreadsheet: 'unknown', message: 'GASへ接続確認中…' };
+        this.updateSyncStatus('診断中…');
+        if (showPopup) this.showProgressPopup('同期接続を診断中です', 'GAS(GET) → POST送信 → 同期キー → スプレッドシートの順に確認しています。');
+
+        try {
+          const health = await this.gasCall('health', {}, 12000, false);
+          if (!health || health.status !== 'success') throw new Error(health && health.message ? health.message : 'GASの稼働確認に失敗しました。');
+          this.connection.gas = 'ok';
+
+          if (String(health.appVersion || '') !== APP_VERSION || health.transport !== 'post-poll-v3') {
+            throw new Error(`GASが旧バージョンです。現在のGAS: ${health.appVersion || '不明'} / 必要: ${APP_VERSION}`);
+          }
+          if (!health.syncTokenConfigured) {
+            this.connection.token = 'ng';
+            throw new Error('GASのスクリプトプロパティにSYNC_TOKENが設定されていません。');
+          }
+
+          const diag = await this.gasCall('diagnose', {}, 15000, true);
+          if (!diag || diag.status !== 'success') throw new Error(diag && diag.message ? diag.message : '同期設定の診断に失敗しました。');
+
+          this.connection.token = 'ok';
+          this.connection.spreadsheet = 'ok';
+          this.connection.message = `GAS v${diag.appVersion || APP_VERSION} / ${diag.spreadsheetName || 'スプレッドシート'} / ${diag.recordCount || 0}件`;
+          safeStore.set('hospital_connection_checked_v2', '1');
+          safeStore.set('hospital_last_diag', new Date().toISOString());
+          this.updateSyncStatus();
+          if (showPopup) this.showPopup('診断結果：接続OK', `GAS・同期キー・スプレッドシートは正常です。\n現在${diag.recordCount || 0}件の記録を確認できます。`);
+          return { ok: true, count: diag.recordCount || 0 };
+        } catch (e) {
+          const detail = this.friendlySyncError(e);
+          if (this.connection.gas !== 'ok') this.connection.gas = 'ng';
+          if (/同期キー/.test(detail) || /SYNC_TOKEN/.test(detail)) this.connection.token = 'ng';
+          if (/スプレッドシート|SPREADSHEET_ID/.test(detail)) this.connection.spreadsheet = 'ng';
+          this.connection.message = detail;
+          safeStore.remove('hospital_connection_checked_v2');
+          this.updateSyncStatus('接続エラー');
+          if (showPopup) this.showPopup('診断結果：接続できません', detail, true);
+          return { ok: false, message: detail };
+        }
+      },
+
+      async flushPendingOps() {
+        const ops = this.getPendingOps();
+        if (!ops.length) return { sent: 0, remaining: 0 };
+        const remaining = [];
+        let sent = 0;
+
+        for (const op of ops) {
+          try {
+            let result;
+            if (op.type === 'save' && op.record) result = await this.gasCall('saveRecord', { record: op.record }, 20000, true);
+            else if (op.type === 'delete') result = await this.gasCall('deleteRecord', { id: op.id, hospitalName: op.hospitalName || '' }, 20000, true);
+            else continue;
+            if (!result || result.status !== 'success') throw new Error(result && result.message ? result.message : '未送信データの反映に失敗しました。');
+            sent++;
+          } catch (e) {
+            console.warn('pending op failed', e);
+            remaining.push(op);
+          }
+        }
+        this.setPendingOps(remaining);
+        return { sent, remaining: remaining.length };
+      },
+
+      applyPendingOpsToRecords(records) {
+        let merged = Array.isArray(records) ? [...records] : [];
+        this.getPendingOps().forEach(op => {
+          if (!op || !op.id) return;
+          if (op.type === 'delete') merged = merged.filter(r => r.id !== op.id);
+          else if (op.type === 'save' && op.record) {
+            const i = merged.findIndex(r => r.id === op.id);
+            if (i >= 0) merged[i] = op.record; else merged.unshift(op.record);
+          }
+        });
+        return merged;
+      },
+
+      async syncNow(showResult = true, skipDiagnose = false) {
+        if (this.syncing) return { ok: false, message: '同期処理中です。' };
+        const check = this.validateSettings();
+        if (!check.ok) {
+          this.updateSyncStatus('未接続');
+          if (showResult) this.showPopup('同期できませんでした', check.message, true);
+          return { ok: false, message: check.message };
+        }
+
+        if (!skipDiagnose && safeStore.get('hospital_connection_checked_v2') !== '1') {
+          const diag = await this.diagnoseSync(false);
+          if (!diag.ok) {
+            if (showResult) this.showPopup('同期できませんでした', diag.message || '接続診断に失敗しました。', true);
+            return diag;
+          }
+        }
+
+        this.syncing = true;
+        this.updateSyncStatus('同期中…');
+        try {
+          await this.flushPendingOps();
+          const result = await this.gasCall('getAllRecords', {}, 25000, true);
+          if (!result || result.status !== 'success' || !Array.isArray(result.records)) {
+            throw new Error(result && result.message ? result.message : '履歴を取得できませんでした。');
+          }
+
+          this.records = this.applyPendingOpsToRecords(result.records);
+          this.hospitals = this.mergeHospitals(defaultHospitals, result.hospitals || [], this.records.map(r => ({ name: r.hospitalName, type: r.hospitalType })));
+          this.saveLocalCache();
+          safeStore.set('hospital_last_sync', new Date().toISOString());
+          safeStore.set('hospital_last_sync_error', '');
+          this.connection.gas = 'ok';
+          this.connection.token = 'ok';
+          this.connection.spreadsheet = 'ok';
+          this.connection.message = `同期済み：${this.records.length}件`;
+          safeStore.set('hospital_connection_checked_v2', '1');
+          this.renderHospitalOptions();
+          this.renderHistory();
+          this.updateSyncStatus();
+
+          const pending = this.getPendingOps().length;
+          if (showResult) {
+            if (pending === 0) this.showPopup('同期しました', `PC・スマホ共通のスプレッドシートから最新の${this.records.length}件を読み込みました。`);
+            else this.showPopup('一部同期できませんでした', `履歴は読み込みましたが、未送信の変更が${pending}件残っています。`, true);
+          }
+          return { ok: pending === 0, count: this.records.length, pending };
+        } catch (e) {
+          const detail = this.friendlySyncError(e);
+          safeStore.set('hospital_last_sync_error', detail);
+          this.connection.message = detail;
+          this.updateSyncStatus('同期エラー');
+          if (showResult) this.showPopup('同期できませんでした', `${detail}\n\nこの端末内の履歴は消していません。`, true);
+          return { ok: false, message: detail };
+        } finally {
+          this.syncing = false;
+          this.updateSyncStatus();
+        }
+      },
+
+      async rescueLocalRecords() {
+        const check = this.validateSettings();
+        if (!check.ok) return this.showPopup('救出できません', check.message, true);
+        if (!confirm('このPC/スマホ内に残っている履歴のうち、スプレッドシートに存在しない記録をクラウドへ追加します。\n\n8月以降など、旧版で保存できなかった記録を救出するときだけ実行してください。\n実行しますか？')) return;
+
+        this.showProgressPopup('端末内データを確認中です', 'スプレッドシートと比較して、未保存の記録だけを救出します。');
+        try {
+          const diag = await this.diagnoseSync(false);
+          if (!diag.ok) throw new Error(diag.message || '接続できません。');
+          const server = await this.gasCall('getAllRecords', {}, 25000, true);
+          if (!server || server.status !== 'success' || !Array.isArray(server.records)) throw new Error(server && server.message ? server.message : 'クラウド履歴を取得できませんでした。');
+          const serverIds = new Set(server.records.map(r => r && r.id).filter(Boolean));
+          const local = Array.isArray(this.records) ? [...this.records] : [];
+          const rescue = local.filter(r => r && r.id && r.hospitalName && !serverIds.has(r.id));
+
+          if (!rescue.length) {
+            this.showPopup('救出対象はありません', 'この端末内だけに残っている記録は見つかりませんでした。');
+            return;
+          }
+
+          let saved = 0;
+          for (const rec of rescue) {
+            const result = await this.gasCall('saveRecord', { record: rec }, 20000, true);
+            if (result && result.status === 'success') saved++;
+          }
+          await this.syncNow(false, true);
+          this.showPopup('端末内データを救出しました', `${saved}件をスプレッドシートへ保存しました。`);
+        } catch (e) {
+          this.showPopup('救出できませんでした', this.friendlySyncError(e), true);
+        }
+      },
+
+      updateSyncStatus(forcedText = '') {
+        const pending = this.getPendingOps().length;
+        const last = safeStore.get('hospital_last_sync');
+        let text = forcedText;
+        if (!text) {
+          if (this.syncing) text = '同期中…';
+          else if (!this.gasUrl) text = '未接続（GAS URL未設定）';
+          else if (!this.syncToken) text = '未接続（同期キー未設定）';
+          else if (pending > 0) text = `未同期 ${pending}件`;
+          else if (last && safeStore.get('hospital_connection_checked_v2') === '1') text = `同期済み ${new Date(last).toLocaleString('ja-JP')}`;
+          else if (safeStore.get('hospital_connection_checked_v2') === '1') text = '接続OK（同期待ち）';
+          else text = '設定済み（接続未確認）';
+        }
+        ['syncStatusText', 'settingsSyncStatus'].forEach(id => {
+          const el = document.getElementById(id); if (el) el.textContent = text;
+        });
+        const header = document.getElementById('headerSyncText');
+        if (header) header.textContent = this.syncing ? '同期中' : (pending > 0 ? `未同期${pending}` : '同期');
+        this.updateConnectionPanel();
+      },
+
+      async copySyncSetupUrl() {
+        this.refreshSettingsFromInputs(true);
+        const check = this.validateSettings();
+        if (!check.ok) return this.showPopup('コピーできませんでした', check.message, true);
+        try {
+          const cfg = JSON.stringify({ gas: this.gasUrl, token: this.syncToken });
+          const encoded = btoa(unescape(encodeURIComponent(cfg))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+          const share = `${window.location.origin}${window.location.pathname}#yuzu-sync=${encoded}`;
+          await navigator.clipboard.writeText(share);
+          this.showPopup('スマホ用URLをコピーしました', 'このURLをスマホで1回開くと、同じGAS URLと同期キーが自動設定されます。\n同期キーはURLの「#」以降に入るため、サーバーへ送信されません。');
+        } catch (e) {
+          console.error(e);
+          this.showPopup('コピーできませんでした', 'ブラウザのクリップボード権限を確認してください。', true);
+        }
+      },
+
+      toggleTokenVisibility() {
+        const el = document.getElementById('settingSyncToken');
+        const btn = document.getElementById('toggleTokenBtn');
+        if (!el) return;
+        el.type = el.type === 'password' ? 'text' : 'password';
+        if (btn) btn.textContent = el.type === 'password' ? '表示' : '隠す';
+      },
+
+      generateSyncToken() {
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        const token = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        const el = document.getElementById('settingSyncToken');
+        if (el) el.value = token;
+        this.refreshSettingsFromInputs(true);
+        this.showPopup('同期キーを生成しました', 'このキーをGAS側のスクリプトプロパティ「SYNC_TOKEN」にも同じ値で設定してください。\nまたはApps Scriptで setupYuzu を実行して、そこで作られたキーをこちらへ入力してください。');
       },
 
       initSpeechRecognition() {
         window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (window.SpeechRecognition) {
           this.recognition = new SpeechRecognition();
-          this.recognition.lang = 'ja-JP'; this.recognition.continuous = true;
-          this.recognition.onresult = (e) => {
+          this.recognition.lang = 'ja-JP';
+          this.recognition.continuous = true;
+          this.recognition.onresult = e => {
             let finalT = '';
             for (let i = e.resultIndex; i < e.results.length; ++i) if (e.results[i].isFinal) finalT += e.results[i][0].transcript;
             if (finalT && this.activeTargetId) {
@@ -223,23 +1403,20 @@
             }
           };
           this.recognition.onend = () => this.resetMicUI();
-          this.recognition.onerror = (e) => { 
-            this.resetMicUI(); 
-            if (e.error === 'not-allowed') this.showPopup("エラー", "マイクへのアクセスが許可されていません。", true); 
-          };
+          this.recognition.onerror = e => { this.resetMicUI(); if (e.error === 'not-allowed') alert('マイクが許可されていません。'); };
         }
       },
-      
+
       toggleSpeechRecognition(id) {
-        if (!this.recognition) return this.showPopup("エラー", "お使いのブラウザは音声入力に対応していません。", true);
+        if (!this.recognition) return alert('音声入力非対応ブラウザです。');
         if (this.activeTargetId === id) { this.recognition.stop(); this.resetMicUI(); }
         else {
           if (this.activeTargetId) { this.recognition.stop(); this.resetMicUI(); }
           this.activeTargetId = id; this.updateMicUI(id, true);
-          try { this.recognition.start(); } catch (e) { this.resetMicUI(); }
+          try { this.recognition.start(); } catch (_) { this.resetMicUI(); }
         }
       },
-      
+
       updateMicUI(id, isRec) {
         const icon = document.getElementById(`micIcon-${id}`), text = document.getElementById(`micText-${id}`);
         if (!icon) return;
@@ -249,36 +1426,37 @@
           btn.classList.replace('bg-teal-50', 'bg-red-50'); btn.classList.replace('border-teal-200', 'border-red-200'); btn.classList.replace('text-teal-600', 'text-red-600'); btn.classList.add('animate-pulse');
         }
       },
-      
+
       resetMicUI() {
-        if (this.activeTargetId) {
-          const icon = document.getElementById(`micIcon-${this.activeTargetId}`), text = document.getElementById(`micText-${this.activeTargetId}`);
-          if (icon) {
-            const btn = icon.closest('button');
-            icon.classList.remove('text-red-500'); text.innerText = '音声入力';
-            btn.classList.replace('bg-red-50', 'bg-teal-50'); btn.classList.replace('border-red-200', 'border-teal-200'); btn.classList.replace('text-red-600', 'text-teal-600'); btn.classList.remove('animate-pulse');
-          }
-          this.activeTargetId = null;
+        if (!this.activeTargetId) return;
+        const icon = document.getElementById(`micIcon-${this.activeTargetId}`), text = document.getElementById(`micText-${this.activeTargetId}`);
+        if (icon) {
+          const btn = icon.closest('button');
+          icon.classList.remove('text-red-500'); text.innerText = '音声入力';
+          btn.classList.replace('bg-red-50', 'bg-teal-50'); btn.classList.replace('border-red-200', 'border-teal-200'); btn.classList.replace('text-red-600', 'text-teal-600'); btn.classList.remove('animate-pulse');
         }
+        this.activeTargetId = null;
       },
 
       handleImageChange(e) {
         const file = e.target.files[0];
         if (!file) return;
-        if (this.images.length >= 5) { this.showPopup("エラー", "画像は最大5枚までです。", true); e.target.value = ''; return; }
+        if (this.images.length >= 5) { this.showPopup('エラー', '画像は最大5枚までです。', true); e.target.value = ''; return; }
         const reader = new FileReader();
         reader.onloadend = () => {
-          this.images.push({ id: Date.now().toString(), dataUrl: reader.result, base64: reader.result.split(',')[1], mimeType: file.type, status: 'pending' });
+          this.images.push({ id: this.createRecordId(), dataUrl: reader.result, base64: reader.result.split(',')[1], mimeType: file.type, status: 'pending' });
           this.renderImageList();
         };
         reader.readAsDataURL(file); e.target.value = '';
       },
-      
+
       removeImage(id) { this.images = this.images.filter(i => i.id !== id); this.renderImageList(); },
-      
+
       renderImageList() {
         const container = document.getElementById('imageListContainer');
-        document.getElementById('imageCountDisplay').innerText = `${this.images.length} / 5枚`;
+        const count = document.getElementById('imageCountDisplay');
+        if (count) count.innerText = `${this.images.length} / 5枚`;
+        if (!container) return;
         if (this.images.length === 0) { container.classList.add('hidden'); container.innerHTML = ''; return; }
         container.classList.remove('hidden');
         const isAnalyzing = this.images.some(i => i.status === 'analyzing');
@@ -287,373 +1465,324 @@
           let btn = '';
           if (img.status === 'pending') {
             const cls = isAnalyzing ? 'bg-gray-400 cursor-not-allowed opacity-80' : 'bg-teal-600 hover:bg-teal-700';
-            btn = `<button type="button" onclick="app.analyzeSingleImage('${img.id}')" ${isAnalyzing ? 'disabled' : ''} class="text-xs flex items-center gap-1 text-white px-3 py-1.5 rounded font-bold shadow-sm transition-colors ${cls}"><i data-lucide="upload" class="w-4 h-4"></i> AIで分析</button>`;
+            btn = `<button onclick="app.analyzeSingleImage('${img.id}')" ${isAnalyzing ? 'disabled' : ''} class="text-xs flex items-center gap-1 text-white px-3 py-1.5 rounded font-bold shadow-sm transition-colors ${cls}"><i data-lucide="upload" class="w-4 h-4"></i> AIで分析</button>`;
           } else if (img.status === 'analyzing') {
-            btn = `<button type="button" disabled class="text-xs flex items-center gap-1 bg-gray-400 text-white px-3 py-1.5 rounded font-bold opacity-80"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 解析中...</button>`;
-          } else if (img.status === 'done') {
-            btn = `<span class="text-xs flex items-center gap-1 text-teal-700 font-bold bg-teal-100 px-3 py-1.5 rounded border border-teal-300"><i data-lucide="check-circle" class="w-4 h-4"></i> 分析完了</span>`;
+            btn = '<button disabled class="text-xs flex items-center gap-1 bg-gray-400 text-white px-3 py-1.5 rounded font-bold opacity-80"><i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 解析中...</button>';
+          } else {
+            btn = '<span class="text-xs flex items-center gap-1 text-teal-700 font-bold bg-teal-100 px-3 py-1.5 rounded border border-teal-300"><i data-lucide="check-circle" class="w-4 h-4"></i> 分析完了</span>';
           }
-          html += `<div class="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-300 shadow-sm"><div class="flex items-center gap-3"><img src="${img.dataUrl}" class="w-12 h-12 object-cover rounded border border-gray-200"><span class="text-sm font-bold text-gray-700">写真 ${idx + 1}</span></div><div class="flex items-center gap-2">${btn}<button type="button" onclick="app.removeImage('${img.id}')" class="text-red-400 hover:text-red-600 p-1" ${img.status==='analyzing'?'disabled':''}><i data-lucide="trash-2" class="w-5 h-5"></i></button></div></div>`;
+          html += `<div class="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-300 shadow-sm"><div class="flex items-center gap-3"><img src="${img.dataUrl}" class="w-12 h-12 object-cover rounded border border-gray-200"><span class="text-sm font-bold text-gray-700">写真 ${idx + 1}</span></div><div class="flex items-center gap-2">${btn}<button onclick="app.removeImage('${img.id}')" class="text-red-500 hover:text-red-700 p-1" ${img.status==='analyzing'?'disabled':''}><i data-lucide="trash-2" class="w-5 h-5"></i></button></div></div>`;
         });
-        container.innerHTML = html; lucide.createIcons();
+        container.innerHTML = html;
+        if (window.lucide) lucide.createIcons();
       },
-      
+
       async analyzeSingleImage(id) {
-        if (!this.gasUrl) return this.showPopup("エラー", "設定タブからGASのURLを設定してください。", true);
+        const check = this.validateSettings();
+        if (!check.ok) return this.showPopup('解析できません', check.message, true);
         const img = this.images.find(i => i.id === id); if (!img) return;
         img.status = 'analyzing'; this.renderImageList();
         try {
-          const res = await fetch(this.gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'analyzeImage', mimeType: img.mimeType, base64Data: img.base64 }) });
-          const result = await res.json();
-          if (result.status === 'success') {
-            const el = document.getElementById('formMedicines');
-            if(el) el.value = el.value ? el.value + '\n\n【写真のAI追記】\n' + result.text : result.text;
-            img.status = 'done';
-          } else throw new Error(result.message);
+          const result = await this.gasCall('analyzeImage', { mimeType: img.mimeType, base64Data: img.base64 }, 60000, true);
+          if (!result || result.status !== 'success') throw new Error(result && result.message ? result.message : 'AI解析に失敗しました。');
+          const el = document.getElementById('formMedicines');
+          if (el) el.value = el.value ? el.value + '\n\n【写真のAI追記】\n' + result.text : result.text;
+          img.status = 'done';
         } catch (e) {
-          console.error(e);
-          this.showPopup("解析エラー", "AI解析中にエラーが発生しました。\nGASの設定やAPIキーを確認してください。", true);
           img.status = 'pending';
+          this.showPopup('解析できませんでした', this.friendlySyncError(e), true);
         } finally { this.renderImageList(); }
       },
 
-      handleSave() {
-        const select = document.getElementById('formHospitalSelect')?.value;
-        let hName = '', hType = '', isNew = false;
-        if (!select) return this.showPopup("エラー", "病院名を選択してください。", true);
-        if (select === 'new') {
-          hName = document.getElementById('formNewHospitalName')?.value.trim();
-          hType = document.getElementById('formNewHospitalType')?.value.trim();
-          if (!hName) return this.showPopup("エラー", "病院名を入力してください。", true);
-          isNew = true;
-        } else {
-          hName = select;
-          const target = this.hospitals.find(h => h.name === hName);
-          if (target) hType = target.type || '';
-        }
+      async handleSave() {
+        this.setSaveBusy(true);
+        try {
+          const select = document.getElementById('formHospitalSelect')?.value;
+          let hName = '', hType = '', isNew = false;
+          if (!select) return this.showPopup('保存できませんでした', '病院名を選択してください。', true);
 
-        const date = document.getElementById('formDate')?.value || '';
-        const tDoc = document.getElementById('formToldDoctor')?.value || '';
-        const dSaid = document.getElementById('formDoctorSaid')?.value || '';
-        const eDet = document.getElementById('formExamDetails')?.value || '';
-        const meds = document.getElementById('formMedicines')?.value || '';
-
-        if (isNew) {
-          this.hospitals.push({ name: hName, type: hType });
-          localStorage.setItem('hospital_list', JSON.stringify(this.hospitals));
-          this.renderHospitalOptions();
-        }
-
-        let newRec = { 
-            id: this.editingId || Date.now().toString(), 
-            hospitalName: hName, 
-            hospitalType: hType, 
-            date: date, 
-            toldDoctor: tDoc, 
-            doctorSaid: dSaid, 
-            examDetails: eDet, 
-            medicines: meds, 
-            timestamp: new Date().toISOString(),
-            syncStatus: 'pending',
-            actionType: this.editingId ? 'edit' : 'add'
-        };
-        
-        if (this.editingId) {
-            this.records = this.records.map(r => r.id === this.editingId ? newRec : r);
-        } else {
-            this.records.unshift(newRec);
-        }
-
-        localStorage.setItem('hospital_records', JSON.stringify(this.records));
-        
-        this.addToSyncQueue(newRec);
-
-        this.showPopup(this.editingId ? "編集完了" : "保存完了", "記録をローカルに保存しました。\n裏側で自動的にクラウドへ同期します。");
-        this.cancelEdit();
-        this.processSyncQueue();
-      },
-      
-      addToSyncQueue(record) {
-          this.syncQueue = this.syncQueue.filter(item => item.id !== record.id);
-          this.syncQueue.push(record);
-          localStorage.setItem('hospital_sync_queue', JSON.stringify(this.syncQueue));
-          this.updateSyncStatusUI();
-      },
-      
-      updateRecordSyncStatus(id, status) {
-          this.records = this.records.map(r => {
-              if (r.id === id) return { ...r, syncStatus: status };
-              return r;
-          });
-          localStorage.setItem('hospital_records', JSON.stringify(this.records));
-          if(document.getElementById('tab-history').classList.contains('hidden') === false) {
-              this.renderHistory();
-          }
-      },
-      
-      updateSyncStatusUI() {
-          const ui = document.getElementById('syncStatus');
-          if (!this.gasUrl) {
-              ui.classList.add('hidden');
-              return;
-          }
-          ui.classList.remove('hidden');
-          if (this.isSyncing) {
-              ui.innerHTML = '<i data-lucide="loader-2" class="w-3 h-3 text-teal-600 animate-spin"></i>同期中...';
-              ui.className = 'text-xs font-bold bg-white text-teal-700 px-2 py-1 rounded-full shadow-sm flex items-center gap-1';
-          } else if (this.syncQueue.length > 0) {
-              ui.innerHTML = `<i data-lucide="cloud-off" class="w-3 h-3 text-amber-500"></i>未同期 (${this.syncQueue.length})`;
-              ui.className = 'text-xs font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded-full shadow-sm flex items-center gap-1 border border-amber-200';
+          if (select === 'new') {
+            hName = document.getElementById('formNewHospitalName')?.value.trim();
+            hType = document.getElementById('formNewHospitalType')?.value.trim();
+            if (!hName) return this.showPopup('保存できませんでした', '病院名を入力してください。', true);
+            isNew = true;
           } else {
-              ui.innerHTML = '<i data-lucide="cloud-check" class="w-3 h-3 text-teal-600"></i>同期済';
-              ui.className = 'text-xs font-bold bg-teal-50 text-teal-700 px-2 py-1 rounded-full shadow-sm flex items-center gap-1 border border-teal-200';
+            hName = select;
+            const target = this.hospitals.find(h => h.name === hName);
+            if (target) hType = target.type || '';
           }
-          lucide.createIcons();
+
+          const wasEditing = !!this.editingId;
+          const record = {
+            id: this.editingId || this.createRecordId(),
+            hospitalName: hName,
+            hospitalType: hType,
+            date: document.getElementById('formDate')?.value || '',
+            toldDoctor: document.getElementById('formToldDoctor')?.value || '',
+            doctorSaid: document.getElementById('formDoctorSaid')?.value || '',
+            examDetails: document.getElementById('formExamDetails')?.value || '',
+            medicines: document.getElementById('formMedicines')?.value || '',
+            timestamp: new Date().toISOString()
+          };
+
+          if (isNew) this.hospitals = this.mergeHospitals(this.hospitals, [{ name: hName, type: hType }]);
+          const idx = this.records.findIndex(r => r.id === record.id);
+          if (idx >= 0) this.records[idx] = record; else this.records.unshift(record);
+          try { this.saveLocalCache(); } catch (e) { console.warn('local cache save failed', e); }
+
+          const check = this.validateSettings();
+          if (!check.ok) {
+            this.queuePendingSave(record);
+            this.editingId = record.id;
+            document.getElementById('formTitle').innerText = '受診記録の編集（未同期）';
+            document.getElementById('formCancelEditBtn').classList.remove('hidden');
+            this.showPopup('保存できませんでした', `${check.message}\n\n入力内容はこの端末内に一時保存しました。設定後にもう一度保存してください。`, true);
+            return;
+          }
+
+          this.showProgressPopup('保存中です', 'スプレッドシートへ保存しています。');
+          try {
+            const result = await this.gasCall('saveRecord', { record }, 25000, true);
+            if (!result || result.status !== 'success' || result.saved !== true) throw new Error(result && result.message ? result.message : 'スプレッドシートへの保存を確認できませんでした。');
+            this.setPendingOps(this.getPendingOps().filter(op => op.id !== record.id));
+            safeStore.set('hospital_last_sync', new Date().toISOString());
+            this.connection = { gas: 'ok', token: 'ok', spreadsheet: 'ok', message: '保存先への接続OK' };
+            safeStore.set('hospital_connection_checked_v2', '1');
+            this.showPopup(wasEditing ? '更新しました' : '保存しました', wasEditing ? '受診記録を更新し、スプレッドシートへの保存を確認しました。' : '受診記録を保存し、スプレッドシートへの保存を確認しました。');
+            this.cancelEdit();
+            this.syncNow(false, true).catch(e => console.warn(e));
+          } catch (e) {
+            this.queuePendingSave(record);
+            this.editingId = record.id;
+            document.getElementById('formTitle').innerText = '受診記録の編集（未同期）';
+            document.getElementById('formCancelEditBtn').classList.remove('hidden');
+            this.showPopup('保存できませんでした', `${this.friendlySyncError(e)}\n\n入力内容はこの端末内に一時保存しました。内容は消していません。`, true);
+          }
+        } catch (e) {
+          this.showPopup('保存できませんでした', `保存処理中にエラーが発生しました。\n${String(e && e.message ? e.message : e)}\n\n入力内容は消していません。`, true);
+        } finally {
+          this.setSaveBusy(false);
+        }
       },
 
-      async processSyncQueue() {
-          if (this.isSyncing || this.syncQueue.length === 0 || !this.gasUrl || !navigator.onLine) return;
-          
-          this.isSyncing = true;
-          this.updateSyncStatusUI();
-          
-          let currentItem = this.syncQueue[0];
-          
-          try {
-              const response = await fetch(this.gasUrl, { 
-                  method: 'POST', 
-                  mode: 'no-cors', 
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                      action: currentItem.actionType === 'delete' ? 'deleteRecord' : 'saveRecord', 
-                      record: currentItem 
-                  }) 
-              });
-              
-              this.syncQueue.shift(); 
-              localStorage.setItem('hospital_sync_queue', JSON.stringify(this.syncQueue));
-              
-              if(currentItem.actionType !== 'delete') {
-                  this.updateRecordSyncStatus(currentItem.id, 'synced');
-              }
-              
-          } catch (e) {
-              console.error("Sync failed for record", currentItem.id, e);
-          } finally {
-              this.isSyncing = false;
-              this.updateSyncStatusUI();
-              
-              if (this.syncQueue.length > 0) {
-                  setTimeout(() => this.processSyncQueue(), 2000); 
-              }
-          }
+      async deleteRecord(id) {
+        const rec = this.records.find(r => r.id === id);
+        if (!rec) return;
+        if (!confirm('この記録を削除しますか？\nPC・スマホの両方から削除します。')) return;
+
+        const check = this.validateSettings();
+        if (!check.ok) {
+          this.queuePendingDelete(id, rec.hospitalName);
+          this.records = this.records.filter(r => r.id !== id);
+          this.saveLocalCache(); this.renderHistory();
+          return this.showPopup('削除を同期できませんでした', `${check.message}\nこの端末では非表示にしました。設定後に同期するとクラウドへ削除を反映します。`, true);
+        }
+
+        this.showProgressPopup('削除中です', 'スプレッドシートから削除しています。');
+        try {
+          const result = await this.gasCall('deleteRecord', { id, hospitalName: rec.hospitalName }, 25000, true);
+          if (!result || result.status !== 'success' || result.deleted !== true) throw new Error(result && result.message ? result.message : '削除結果を確認できませんでした。');
+          this.setPendingOps(this.getPendingOps().filter(op => op.id !== id));
+          this.records = this.records.filter(r => r.id !== id);
+          this.saveLocalCache(); this.renderHistory();
+          safeStore.set('hospital_last_sync', new Date().toISOString());
+          this.showPopup('削除しました', 'スプレッドシートから削除しました。PC・スマホの両方に反映されます。');
+        } catch (e) {
+          this.queuePendingDelete(id, rec.hospitalName);
+          this.records = this.records.filter(r => r.id !== id);
+          this.saveLocalCache(); this.renderHistory();
+          this.showPopup('削除を同期できませんでした', `${this.friendlySyncError(e)}\n\nこの端末では非表示にしました。通信復旧後に同期してください。`, true);
+        }
       },
 
       cancelEdit() {
         this.editingId = null;
-        if(document.getElementById('formHospitalSelect')) document.getElementById('formHospitalSelect').value = '';
+        const select = document.getElementById('formHospitalSelect'); if (select) select.value = '';
         this.handleHospitalSelectChange('');
-        ['formNewHospitalName', 'formNewHospitalType', 'formToldDoctor', 'formDoctorSaid', 'formExamDetails', 'formMedicines'].forEach(id => {
-          const el = document.getElementById(id); if (el) el.value = '';
-        });
+        ['formNewHospitalName', 'formNewHospitalType', 'formToldDoctor', 'formDoctorSaid', 'formExamDetails', 'formMedicines'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const dateEl = document.getElementById('formDate'); if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
         this.images = []; this.renderImageList();
         const imgInput = document.getElementById('formImageInput'); if (imgInput) imgInput.value = '';
-        document.getElementById('formTitle').innerText = "新しい受診記録";
-        document.getElementById('formCancelEditBtn').classList.add('hidden');
+        const title = document.getElementById('formTitle'); if (title) title.innerText = '新しい受診記録';
+        const cancel = document.getElementById('formCancelEditBtn'); if (cancel) cancel.classList.add('hidden');
       },
 
-      switchTab(id) {
+      async switchTab(id) {
         ['record', 'history', 'settings'].forEach(t => {
-          document.getElementById('tab-'+t).classList.add('hidden');
-          const nav = document.getElementById('nav-'+t);
+          document.getElementById('tab-' + t).classList.add('hidden');
+          const nav = document.getElementById('nav-' + t);
           nav.classList.remove('text-teal-600'); nav.classList.add('text-gray-400');
         });
-        document.getElementById('tab-'+id).classList.remove('hidden');
-        const activeNav = document.getElementById('nav-'+id);
+        document.getElementById('tab-' + id).classList.remove('hidden');
+        const activeNav = document.getElementById('nav-' + id);
         activeNav.classList.remove('text-gray-400'); activeNav.classList.add('text-teal-600');
-        if (id === 'history') {
-            this.currentPage = {};
-            this.renderHistory();
-        } else if (id === 'record' && !this.editingId) {
-            window.scrollTo(0, 0);
+        if (id === 'settings') {
+          this.refreshSettingsFromInputs(false);
+          this.updateSyncStatus();
         }
+        if (id === 'history') {
+          this.renderHistory();
+          if (this.gasUrl && this.syncToken && safeStore.get('hospital_connection_checked_v2') === '1') {
+            this.syncNow(false, true).catch(e => console.warn(e));
+          }
+        } else if (id === 'record' && !this.editingId) window.scrollTo(0, 0);
       },
-      
+
       renderHospitalOptions() {
         const select = document.getElementById('formHospitalSelect');
-        select.innerHTML = '<option value="" disabled selected>選択してください</option>';
-        this.hospitals.forEach(h => { const opt = document.createElement('option'); opt.value = h.name; opt.innerText = `${h.name} ${h.type ? `(${h.type})` : ''}`; select.appendChild(opt); });
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="" disabled>選択してください</option>';
+        this.hospitals.forEach(h => {
+          const opt = document.createElement('option'); opt.value = h.name; opt.innerText = `${h.name} ${h.type ? `(${h.type})` : ''}`; select.appendChild(opt);
+        });
         const newOpt = document.createElement('option'); newOpt.value = 'new'; newOpt.innerText = '+ 新しく病院を追加する'; select.appendChild(newOpt);
+        if (current && Array.from(select.options).some(o => o.value === current)) select.value = current; else select.value = '';
+        this.renderCsvHospitalSuggestions();
       },
-      
+
       handleHospitalSelectChange(val) {
         const c = document.getElementById('formNewHospitalContainer'), i = document.getElementById('formNewHospitalName');
-        if (val === 'new') { c.classList.remove('hidden'); i.required = true; } else { c.classList.add('hidden'); i.required = false; }
+        if (!c || !i) return;
+        if (val === 'new') { c.classList.remove('hidden'); i.required = true; }
+        else { c.classList.add('hidden'); i.required = false; }
       },
-      
+
       editRecord(id) {
         const rec = this.records.find(r => r.id === id); if (!rec) return;
         this.editingId = id;
         const select = document.getElementById('formHospitalSelect');
-        if (this.hospitals.some(h => h.name === rec.hospitalName)) { select.value = rec.hospitalName; this.handleHospitalSelectChange(rec.hospitalName); }
-        else { select.value = 'new'; this.handleHospitalSelectChange('new'); document.getElementById('formNewHospitalName').value = rec.hospitalName; document.getElementById('formNewHospitalType').value = rec.hospitalType || ''; }
-        
+        if (!this.hospitals.some(h => h.name === rec.hospitalName)) {
+          this.hospitals = this.mergeHospitals(this.hospitals, [{ name: rec.hospitalName, type: rec.hospitalType }]);
+          this.renderHospitalOptions();
+        }
+        select.value = rec.hospitalName; this.handleHospitalSelectChange(rec.hospitalName);
         document.getElementById('formDate').value = rec.date || '';
         document.getElementById('formToldDoctor').value = rec.toldDoctor || '';
         document.getElementById('formDoctorSaid').value = rec.doctorSaid || '';
-        if(document.getElementById('formExamDetails')) document.getElementById('formExamDetails').value = rec.examDetails || '';
+        document.getElementById('formExamDetails').value = rec.examDetails || '';
         document.getElementById('formMedicines').value = rec.medicines || '';
-        
         this.images = []; this.renderImageList();
-        document.getElementById('formTitle').innerText = "受診記録の編集"; document.getElementById('formCancelEditBtn').classList.remove('hidden');
+        document.getElementById('formTitle').innerText = '受診記録の編集';
+        document.getElementById('formCancelEditBtn').classList.remove('hidden');
         this.switchTab('record'); window.scrollTo(0, 0);
       },
 
-      confirmDelete(id) {
-        this.showConfirm("削除の確認", "この記録を削除してもよろしいですか？", () => {
-            this.deleteRecord(id);
-        });
+      setSaveBusy(isBusy) {
+        const btn = document.getElementById('formSaveBtn');
+        const text = document.getElementById('formSaveBtnText');
+        if (btn) btn.disabled = !!isBusy;
+        if (text) text.innerText = isBusy ? '保存中…' : (this.editingId ? '更新する' : '記録を保存する');
       },
 
-      deleteRecord(id) { 
-          const target = this.records.find(r => r.id === id);
-          if(!target) return;
-          
-          this.records = this.records.filter(r => r.id !== id); 
-          localStorage.setItem('hospital_records', JSON.stringify(this.records)); 
-          
-          this.addToSyncQueue({ id: id, hospitalName: target.hospitalName, actionType: 'delete' });
-          this.processSyncQueue();
-          
-          this.renderHistory(); 
+      showProgressPopup(title, msg) {
+        try {
+          document.getElementById('popupTitle').innerText = title;
+          document.getElementById('popupMessage').innerText = msg;
+          const iconContainer = document.getElementById('popupIconContainer');
+          iconContainer.innerHTML = '<i data-lucide="loader-2" class="h-6 w-6 text-teal-700 animate-spin"></i>';
+          iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 mb-4';
+          const okBtn = document.querySelector('#customPopup button');
+          if (okBtn) okBtn.classList.add('hidden');
+          document.getElementById('customPopup').classList.remove('hidden');
+          if (window.lucide) lucide.createIcons();
+        } catch (e) { console.error(e); }
       },
-      
+
       showPopup(title, msg, isErr = false) {
-        document.getElementById('popupTitle').innerText = title; document.getElementById('popupMessage').innerText = msg;
-        const iconContainer = document.getElementById('popupIconContainer');
-        if (isErr) { iconContainer.innerHTML = '<i data-lucide="alert-circle" class="h-6 w-6 text-red-600"></i>'; iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4'; }
-        else { iconContainer.innerHTML = '<i data-lucide="check-circle" class="h-6 w-6 text-teal-600"></i>'; iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 mb-4'; }
-        document.getElementById('customPopup').classList.remove('hidden'); lucide.createIcons();
-      },
-      
-      closePopup() { document.getElementById('customPopup').classList.add('hidden'); },
-
-      showConfirm(title, msg, callback) {
-        document.getElementById('confirmTitle').innerText = title; 
-        document.getElementById('confirmMessage').innerText = msg;
-        this.confirmCallback = callback;
-        
-        const btn = document.getElementById('confirmActionBtn');
-        btn.onclick = () => {
-          if(this.confirmCallback) this.confirmCallback();
-          this.closeConfirm();
-        };
-
-        document.getElementById('confirmPopup').classList.remove('hidden'); 
-        lucide.createIcons();
+        try {
+          document.getElementById('popupTitle').innerText = title;
+          document.getElementById('popupMessage').innerText = msg;
+          const iconContainer = document.getElementById('popupIconContainer');
+          if (isErr) {
+            iconContainer.innerHTML = '<i data-lucide="alert-circle" class="h-6 w-6 text-red-600"></i>';
+            iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4';
+          } else {
+            iconContainer.innerHTML = '<i data-lucide="check-circle" class="h-6 w-6 text-teal-600"></i>';
+            iconContainer.className = 'mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-teal-100 mb-4';
+          }
+          const okBtn = document.querySelector('#customPopup button');
+          if (okBtn) okBtn.classList.remove('hidden');
+          document.getElementById('customPopup').classList.remove('hidden');
+          if (window.lucide) lucide.createIcons();
+        } catch (e) {
+          alert(`${title}\n\n${msg}`);
+        }
       },
 
-      closeConfirm() {
-        document.getElementById('confirmPopup').classList.add('hidden');
-        this.confirmCallback = null;
-      },
-      
-      saveGasUrl() {
-        const url = document.getElementById('settingGasUrl').value; this.gasUrl = url; localStorage.setItem('hospital_gas_url', url);
-        this.updateSyncStatusUI();
-        if (this.gasUrl && this.syncQueue.length > 0) this.processSyncQueue();
-        this.showPopup("設定完了", "GASのURLを保存しました。");
-      },
-      
-      escapeHTML(str) { return str ? str.replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t])) : ''; },
-      
-      changePage(hospitalName, change) {
-          if (!this.currentPage[hospitalName]) this.currentPage[hospitalName] = 1;
-          this.currentPage[hospitalName] += change;
-          this.renderHistory();
-      },
-      
+      closePopup() { const p = document.getElementById('customPopup'); if (p) p.classList.add('hidden'); },
+
+      escapeHTML(str) { return str ? String(str).replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t])) : ''; },
+
       renderHistory() {
         const container = document.getElementById('historyContainer');
+        if (!container) return;
         const grouped = this.records.reduce((acc, rec) => {
+          if (!rec || !rec.hospitalName) return acc;
           if (!acc[rec.hospitalName]) acc[rec.hospitalName] = { name: rec.hospitalName, type: rec.hospitalType || '', records: [] };
           if (rec.hospitalType && !acc[rec.hospitalName].type) acc[rec.hospitalName].type = rec.hospitalType;
           acc[rec.hospitalName].records.push(rec); return acc;
         }, {});
-        
         const groupValues = Object.values(grouped);
-        if (groupValues.length === 0) { container.innerHTML = `<div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-500 font-bold">記録がありません。</div>`; return; }
-        
-        groupValues.sort((a, b) => {
-            if(a.records.length === 0) return 1;
-            if(b.records.length === 0) return -1;
-            return new Date(b.records[0].timestamp) - new Date(a.records[0].timestamp);
-        });
-        
-        let html = '';
-        groupValues.forEach((g, gIdx) => {
-          if (!this.currentPage[g.name]) this.currentPage[g.name] = 1;
-          const page = this.currentPage[g.name];
-          const totalRecords = g.records.length;
-          const totalPages = Math.ceil(totalRecords / this.recordsPerPage);
-          
-          const startIdx = (page - 1) * this.recordsPerPage;
-          const endIdx = startIdx + this.recordsPerPage;
-          const currentRecords = g.records.slice(startIdx, endIdx);
-            
-          let typeHtml = g.type ? `<span class="text-xs text-gray-500 font-normal ml-1">(${this.escapeHTML(g.type)})</span>` : '';
-          let recordsHtml = currentRecords.map(rec => {
-              const syncIcon = rec.syncStatus === 'pending' ? 
-                  `<span class="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1" title="未同期"><i data-lucide="cloud-off" class="w-3 h-3"></i></span>` : 
-                  '';
-                  
-              return `
-              <div class="p-4 hover:bg-gray-50 transition border-t border-gray-100 first:border-0">
-                <div class="flex justify-between items-start mb-2">
-                  <span class="text-sm font-bold text-gray-700 flex items-center gap-1.5"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${rec.date} ${syncIcon}</span>
-                  <div class="flex gap-3">
-                    <button onclick="app.editRecord('${rec.id}')" class="text-blue-500 hover:text-blue-700 transition" title="編集"><i data-lucide="edit" class="w-4 h-4"></i></button>
-                    <button onclick="app.confirmDelete('${rec.id}')" class="text-red-500 hover:text-red-700 transition" title="削除"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                  </div>
-                </div>
-                <div class="space-y-3 mt-3">
-                  ${rec.toldDoctor ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> 伝えたこと</p><p class="text-sm text-gray-900 font-medium bg-gray-100 p-2 rounded border border-gray-200">${this.escapeHTML(rec.toldDoctor).replace(/\n/g, '<br>')}</p></div>` : ''}
-                  ${rec.doctorSaid ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="stethoscope" class="w-3 h-3"></i> 先生の話</p><p class="text-sm text-gray-900 font-medium bg-teal-50 p-2 rounded border border-teal-200">${this.escapeHTML(rec.doctorSaid).replace(/\n/g, '<br>')}</p></div>` : ''}
-                  ${rec.examDetails ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="microscope" class="w-3 h-3"></i> 検査内容</p><p class="text-sm text-gray-900 font-medium bg-blue-50 p-2 rounded border border-blue-200">${this.escapeHTML(rec.examDetails).replace(/\n/g, '<br>')}</p></div>` : ''}
-                  ${rec.medicines ? `<div><p class="text-xs font-bold text-gray-600 flex items-center gap-1"><i data-lucide="pill" class="w-3 h-3"></i> 処方薬</p><p class="text-sm text-gray-900 font-medium whitespace-pre-wrap border border-gray-300 p-2 rounded bg-white">${this.escapeHTML(rec.medicines)}</p></div>` : ''}
-                </div>
-              </div>`
-          }).join('');
-          
-          let paginationHtml = '';
-          if (totalPages > 1) {
-              const hNameEscaped = this.escapeHTML(g.name).replace(/'/g, "\\'");
-              paginationHtml = `
-              <div class="bg-gray-50 p-2 border-t border-gray-200 flex justify-between items-center text-sm">
-                  <button onclick="app.changePage('${hNameEscaped}', -1)" ${page === 1 ? 'disabled class="text-gray-300 cursor-not-allowed"' : 'class="text-teal-600 hover:text-teal-800 font-bold px-2 py-1 flex items-center gap-1"'}><i data-lucide="chevron-left" class="w-4 h-4"></i> 次を見る</button>
-                  <span class="text-xs font-medium text-gray-500">${page} / ${totalPages} ページ</span>
-                  <button onclick="app.changePage('${hNameEscaped}', 1)" ${page === totalPages ? 'disabled class="text-gray-300 cursor-not-allowed"' : 'class="text-teal-600 hover:text-teal-800 font-bold px-2 py-1 flex items-center gap-1"'}><i data-lucide="chevron-right" class="w-4 h-4"></i> 古い記録</button>
-              </div>`;
-          }
+        if (groupValues.length === 0) { container.innerHTML = '<div class="bg-white rounded-xl shadow-sm p-8 text-center text-gray-600 font-bold border border-gray-300">記録がありません。</div>'; return; }
 
-          html += `<div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-300 mb-6">
-              <div class="bg-gray-100 p-3 px-4 border-b border-gray-300 flex items-center gap-2">
-                  <i data-lucide="hospital" class="w-4.5 h-4.5 text-teal-700"></i>
-                  <h3 class="font-bold text-gray-900">${this.escapeHTML(g.name)} ${typeHtml}</h3>
-                  <span class="ml-auto bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-1 rounded-full border border-teal-200">全 ${totalRecords}件</span>
+        let html = '';
+        groupValues.forEach(g => {
+          const typeHtml = g.type ? `<span class="text-xs text-gray-600 font-normal ml-1">(${this.escapeHTML(g.type)})</span>` : '';
+          const recordsHtml = g.records.map(rec => `
+            <div class="p-4 hover:bg-gray-50 transition">
+              <div class="flex justify-between items-start mb-2">
+                <span class="text-sm font-bold text-gray-800 flex items-center gap-1"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${this.escapeHTML(rec.date)}</span>
+                <div class="flex gap-3">
+                  <button onclick="app.editRecord('${rec.id}')" class="text-blue-600 hover:text-blue-800 transition" title="編集"><i data-lucide="edit" class="w-5 h-5"></i></button>
+                  <button onclick="app.deleteRecord('${rec.id}')" class="text-red-600 hover:text-red-800 transition" title="削除"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                </div>
               </div>
-              <div class="flex flex-col">
-                  ${recordsHtml}
+              <div class="space-y-3 mt-3">
+                ${rec.toldDoctor ? `<div><p class="text-xs font-bold text-gray-700">伝えたこと</p><p class="text-sm text-gray-950 font-medium bg-gray-100 p-2 rounded border border-gray-300">${this.escapeHTML(rec.toldDoctor).replace(/\n/g, '<br>')}</p></div>` : ''}
+                ${rec.doctorSaid ? `<div><p class="text-xs font-bold text-gray-700">先生の話</p><p class="text-sm text-gray-950 font-medium bg-teal-50 p-2 rounded border border-teal-300">${this.escapeHTML(rec.doctorSaid).replace(/\n/g, '<br>')}</p></div>` : ''}
+                ${rec.examDetails ? `<div><p class="text-xs font-bold text-gray-700">検査内容</p><p class="text-sm text-gray-950 font-medium bg-blue-50 p-2 rounded border border-blue-300">${this.escapeHTML(rec.examDetails).replace(/\n/g, '<br>')}</p></div>` : ''}
+                ${rec.medicines ? `<div><p class="text-xs font-bold text-gray-700">処方薬</p><p class="text-sm text-gray-950 font-medium whitespace-pre-wrap border border-gray-400 p-2 rounded bg-white">${this.escapeHTML(rec.medicines)}</p></div>` : ''}
               </div>
-              ${paginationHtml}
-          </div>`;
+            </div>`).join('');
+          html += `<div class="bg-white rounded-xl shadow-sm overflow-hidden border-2 border-gray-300"><div class="bg-gray-100 p-3 px-4 border-b border-gray-300 flex items-center gap-2"><i data-lucide="hospital" class="w-5 h-5 text-teal-700"></i><h3 class="font-bold text-gray-950">${this.escapeHTML(g.name)} ${typeHtml}</h3><span class="ml-auto bg-teal-100 text-teal-900 text-xs font-bold px-2 py-1 rounded-full border border-teal-300">${g.records.length}件</span></div><div class="divide-y divide-gray-300">${recordsHtml}</div></div>`;
         });
-        
-        container.innerHTML = html; lucide.createIcons();
+        container.innerHTML = html;
+        if (window.lucide) lucide.createIcons();
       }
     };
-    document.addEventListener('DOMContentLoaded', () => app.init());
+
+    window.app = app;
+    window.safeStore = safeStore;
+
+    function surfaceRuntimeError(title, err) {
+      const message = String(err && err.message ? err.message : err || '不明なエラーです。');
+      console.error(title, err);
+      try {
+        if (window.app && typeof window.app.showPopup === 'function') {
+          window.app.showPopup(title, message + '\n\n入力内容は消していません。', true);
+        } else {
+          alert(title + '\n\n' + message);
+        }
+      } catch (_) {
+        try { alert(title + '\n\n' + message); } catch (_) {}
+      }
+    }
+
+    window.addEventListener('error', event => {
+      if (!event || !event.error) return;
+      surfaceRuntimeError('画面処理でエラーが発生しました', event.error);
+    });
+    window.addEventListener('unhandledrejection', event => {
+      if (!event) return;
+      surfaceRuntimeError('処理を完了できませんでした', event.reason || '不明なエラーです。');
+    });
+
+    console.info('YUZU Hospital Record FullSync v2.2');
+    document.addEventListener('DOMContentLoaded', () => {
+      app.init().catch(err => surfaceRuntimeError('初期化できませんでした', err));
+    });
+
   </script>
 </body>
 </html>
